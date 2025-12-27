@@ -1,7 +1,9 @@
-const CACHE_NAME = 'zagreb-temp-v1';
+const CACHE_NAME = 'zagreb-temp-v2';
 const ASSETS = [
   './',
   './index.html',
+  './style.css',
+  './app.js',
   './icon.svg',
   './icon-192.png',
   './icon-512.png'
