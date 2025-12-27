@@ -2,7 +2,7 @@
   "name": "Zagreb Temperatura",
   "short_name": "Zagreb",
   "description": "Trenutna temperatura u Zagrebu (DHMZ)",
-  "start_url": "./",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#1a1a2e",
