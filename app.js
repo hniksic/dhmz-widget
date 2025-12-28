@@ -261,9 +261,6 @@ function render(station) {
             ` : ''}
         </div>
 
-        <div class="footer">
-            Izvor: <a href="https://meteo.hr" target="_blank">DHMZ</a>
-        </div>
     `;
 }
 
@@ -278,9 +275,6 @@ function renderError(message) {
             <div class="error-icon">⚠️</div>
             <p>${message}</p>
             <button class="retry-btn" onclick="location.reload()">Pokušaj ponovo</button>
-        </div>
-        <div class="footer">
-            Izvor: <a href="https://meteo.hr" target="_blank">DHMZ</a>
         </div>
     `;
 }
