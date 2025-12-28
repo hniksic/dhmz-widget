@@ -53,7 +53,7 @@ const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska_n.xml';
 const PROXY_URL = 'https://api.allorigins.win/raw?url=';
 
 /** Stations to look for, in priority order */
-const TARGET_STATIONS = ['Zagreb-Maksimir', 'Zagreb-Grič'];
+const TARGET_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
 
 /** Refresh interval in milliseconds (15 minutes) */
 const REFRESH_INTERVAL = 15 * 60 * 1000;
@@ -191,16 +191,23 @@ function getTextOrNull(parent, selector) {
  * @returns {StationData}
  */
 function prepareDisplayData(stations, measurementTime) {
+    // Short display names for the stations
+    const shortName = name => name.replace('Zagreb-', '');
+
     if (stations.length === 2) {
         const avgTemp = (stations[0].temperature + stations[1].temperature) / 2;
         return {
             ...stations[0],
-            name: 'Maksimir / Grič',
+            name: 'Grič / Maksimir',
+            displayName: 'Grič + Maksimir',
             temperature: avgTemp,
             measurementTime
         };
     }
-    return stations[0];
+    return {
+        ...stations[0],
+        displayName: shortName(stations[0].name)
+    };
 }
 
 /**
@@ -224,7 +231,7 @@ function render(station) {
         </div>
 
         <div class="station-info">
-            <div class="measurement-time">${station.measurementTime ? `Mjereno: ${station.measurementTime}` : ''}</div>
+            <div class="measurement-time">${station.measurementTime ? `${station.measurementTime}` : ''} · ${station.displayName}</div>
         </div>
 
         ${station.condition ? `
