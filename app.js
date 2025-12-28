@@ -46,8 +46,8 @@
  * as we want city center measurements.
  */
 
-/** DHMZ XML endpoint for current weather data */
-const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska_n.xml';
+/** DHMZ XML endpoint for current weather data (by region, includes both Grič and Maksimir) */
+const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 
 /** CORS proxy (vrijeme.hr doesn't send CORS headers) */
 const PROXY_URL = 'https://api.allorigins.win/raw?url=';
@@ -104,7 +104,7 @@ async function fetchWeatherData() {
             throw new Error('Zagreb station not found');
         }
 
-        const displayData = prepareDisplayData(stations, measurementTime);
+        const displayData = prepareDisplayData(stations);
         render(displayData);
 
     } catch (error) {
@@ -185,28 +185,15 @@ function getTextOrNull(parent, selector) {
 }
 
 /**
- * Prepares data for display. If both stations available, averages temperature.
+ * Prepares data for display. Uses first available station (Grič preferred).
  * @param {StationData[]} stations
- * @param {string} measurementTime
  * @returns {StationData}
  */
-function prepareDisplayData(stations, measurementTime) {
-    // Short display names for the stations
-    const shortName = name => name.replace('Zagreb-', '');
-
-    if (stations.length === 2) {
-        const avgTemp = (stations[0].temperature + stations[1].temperature) / 2;
-        return {
-            ...stations[0],
-            name: 'Grič / Maksimir',
-            displayName: 'Grič + Maksimir',
-            temperature: avgTemp,
-            measurementTime
-        };
-    }
+function prepareDisplayData(stations) {
+    const station = stations[0];
     return {
-        ...stations[0],
-        displayName: shortName(stations[0].name)
+        ...station,
+        displayName: station.name.replace('Zagreb-', '')
     };
 }
 
