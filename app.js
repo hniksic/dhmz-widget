@@ -210,58 +210,47 @@ function prepareDisplayData(stations, measurementTime) {
     };
 }
 
+/** Helper to show/hide an element */
+function show(id) { document.getElementById(id).hidden = false; }
+function hide(id) { document.getElementById(id).hidden = true; }
+function setText(id, text) { document.getElementById(id).textContent = text; }
+
 /**
  * Renders weather data to the widget.
  * @param {StationData} station
  */
 function render(station) {
-    const widget = document.getElementById('widget');
-    const tempDisplay = station.temperature.toFixed(1);
+    hide('loading');
+    hide('error');
 
-    widget.innerHTML = `
-        <div class="header">
-            <h1>Zagreb</h1>
-            <div class="subtitle">Trenutna temperatura</div>
-        </div>
+    setText('temperature', station.temperature.toFixed(1));
+    setText('time', station.measurementTime || '');
+    setText('station', station.displayName);
 
-        <div class="temperature-display">
-            <div class="temperature-value">
-                ${tempDisplay}<span class="unit">°C</span>
-            </div>
-        </div>
+    if (station.condition) {
+        setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));
+        show('condition-container');
+    }
 
-        <div class="station-info">
-            <div class="measurement-time">${station.measurementTime ? `${station.measurementTime}` : ''} · ${station.displayName}</div>
-        </div>
+    if (station.humidity) {
+        setText('humidity', station.humidity);
+        show('humidity-container');
+    }
 
-        ${station.condition ? `
-        <div class="weather-condition">
-            ${station.condition.charAt(0).toUpperCase() + station.condition.slice(1)}
-        </div>
-        ` : ''}
+    if (station.pressure) {
+        setText('pressure', station.pressure);
+        show('pressure-container');
+    }
 
-        <div class="details">
-            ${station.humidity ? `
-            <div class="detail-item">
-                <div class="detail-label">Vlažnost</div>
-                <div class="detail-value">${station.humidity}%</div>
-            </div>
-            ` : ''}
-            ${station.pressure ? `
-            <div class="detail-item">
-                <div class="detail-label">Tlak</div>
-                <div class="detail-value">${station.pressure} hPa</div>
-            </div>
-            ` : ''}
-            ${station.windSpeed ? `
-            <div class="detail-item">
-                <div class="detail-label">Vjetar</div>
-                <div class="detail-value">${station.windSpeed} m/s ${station.windDirection || ''}</div>
-            </div>
-            ` : ''}
-        </div>
+    if (station.windSpeed) {
+        const wind = station.windDirection
+            ? `${station.windSpeed} m/s ${station.windDirection}`
+            : `${station.windSpeed} m/s`;
+        setText('wind', wind);
+        show('wind-container');
+    }
 
-    `;
+    show('weather');
 }
 
 /**
@@ -269,14 +258,10 @@ function render(station) {
  * @param {string} message
  */
 function renderError(message) {
-    const widget = document.getElementById('widget');
-    widget.innerHTML = `
-        <div class="error">
-            <div class="error-icon">⚠️</div>
-            <p>${message}</p>
-            <button class="retry-btn" onclick="location.reload()">Pokušaj ponovo</button>
-        </div>
-    `;
+    hide('loading');
+    hide('weather');
+    setText('error-message', message);
+    show('error');
 }
 
 // --- Initialization ---

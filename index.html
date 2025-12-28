@@ -19,9 +19,54 @@
 </head>
 <body>
     <div class="widget" id="widget">
-        <div class="loading">
+        <!-- Loading state -->
+        <div class="loading" id="loading">
             <div class="loading-spinner"></div>
             <p>Učitavanje podataka...</p>
+        </div>
+
+        <!-- Error state (hidden by default) -->
+        <div class="error" id="error" hidden>
+            <div class="error-icon">⚠️</div>
+            <p id="error-message"></p>
+            <button class="retry-btn" onclick="location.reload()">Pokušaj ponovo</button>
+        </div>
+
+        <!-- Weather display (hidden by default) -->
+        <div id="weather" hidden>
+            <div class="header">
+                <h1>Zagreb</h1>
+                <div class="subtitle">Trenutna temperatura</div>
+            </div>
+
+            <div class="temperature-display">
+                <div class="temperature-value">
+                    <span id="temperature"></span><span class="unit">°C</span>
+                </div>
+            </div>
+
+            <div class="station-info">
+                <div class="measurement-time"><span id="time"></span> · <span id="station"></span></div>
+            </div>
+
+            <div class="weather-condition" id="condition-container" hidden>
+                <span id="condition"></span>
+            </div>
+
+            <div class="details" id="details">
+                <div class="detail-item" id="humidity-container" hidden>
+                    <div class="detail-label">Vlažnost</div>
+                    <div class="detail-value"><span id="humidity"></span>%</div>
+                </div>
+                <div class="detail-item" id="pressure-container" hidden>
+                    <div class="detail-label">Tlak</div>
+                    <div class="detail-value"><span id="pressure"></span> hPa</div>
+                </div>
+                <div class="detail-item" id="wind-container" hidden>
+                    <div class="detail-label">Vjetar</div>
+                    <div class="detail-value"><span id="wind"></span></div>
+                </div>
+            </div>
         </div>
     </div>
 
