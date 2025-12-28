@@ -242,11 +242,9 @@ function render(station) {
         show('pressure-container');
     }
 
-    if (station.windSpeed) {
-        const wind = station.windDirection
-            ? `${station.windSpeed} m/s ${station.windDirection}`
-            : `${station.windSpeed} m/s`;
-        setText('wind', wind);
+    if (station.windSpeed && parseFloat(station.windSpeed) > 0) {
+        const dir = (station.windDirection && station.windDirection !== 'C') ? ` ${station.windDirection}` : '';
+        setText('wind', `${station.windSpeed} m/s${dir}`);
         show('wind-container');
     }
 
