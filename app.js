@@ -327,3 +327,6 @@ window.addEventListener('focus', refreshIfStale);
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
 }
+
+// Tap anywhere on widget to refresh
+document.getElementById('widget').addEventListener('click', refreshIfStale);
