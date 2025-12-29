@@ -220,7 +220,6 @@ function setText(id, text) { document.getElementById(id).textContent = text; }
  * @param {StationData} station
  */
 function render(station) {
-    hide('loading');
     hide('error');
 
     // Reset optional containers (they may have been shown by previous render)
@@ -270,7 +269,6 @@ function render(station) {
  * @param {string} message
  */
 function renderError(message) {
-    hide('loading');
     hide('weather');
     setText('error-message', message);
     show('error');

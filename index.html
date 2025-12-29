@@ -18,13 +18,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="widget" id="widget">
-        <!-- Loading state -->
-        <div class="loading" id="loading">
-            <div class="loading-spinner"></div>
-            <p>Učitavanje podataka...</p>
-        </div>
-
+    <div class="widget refreshing" id="widget">
         <!-- Error state (hidden by default) -->
         <div class="error" id="error" hidden>
             <div class="error-icon">⚠️</div>
@@ -32,7 +26,7 @@
             <button class="retry-btn" onclick="location.reload()">Pokušaj ponovo</button>
         </div>
 
-        <!-- Weather display (hidden by default) -->
+        <!-- Weather display (hidden until data loads) -->
         <div id="weather" hidden>
             <div class="header">
                 <h1>Zagreb</h1>
