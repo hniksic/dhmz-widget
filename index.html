@@ -29,7 +29,7 @@
         <!-- Weather display (hidden until data loads) -->
         <div id="weather" hidden>
             <div class="header">
-                <h1>Zagreb</h1>
+                <h1 id="title">Zagreb</h1>
             </div>
 
             <div class="temperature-display">
@@ -42,23 +42,30 @@
                 <div class="measurement-time"><span id="time"></span><span id="time-separator"> · </span><span id="station"></span></div>
             </div>
 
-            <div class="weather-condition" id="condition-container" hidden>
+            <div class="weather-condition" id="condition-container">
                 <span id="condition"></span>
             </div>
 
             <div class="details" id="details">
-                <div class="detail-item" id="humidity-container" hidden>
+                <div class="detail-item empty" id="humidity-container">
                     <div class="detail-label">Vlažnost</div>
                     <div class="detail-value"><span id="humidity"></span>%</div>
                 </div>
-                <div class="detail-item" id="pressure-container" hidden>
+                <div class="detail-item empty" id="pressure-container">
                     <div class="detail-label">Tlak <span id="pressure-trend" class="trend"></span></div>
                     <div class="detail-value"><span id="pressure"></span></div>
                 </div>
-                <div class="detail-item" id="wind-container" hidden>
+                <div class="detail-item empty" id="wind-container">
                     <div class="detail-label">Vjetar</div>
                     <div class="detail-value"><span id="wind"></span></div>
                 </div>
+            </div>
+        </div>
+
+        <div class="location-picker" id="location-picker">
+            <div class="location-trigger" id="location-trigger">▾</div>
+            <div class="location-dropdown" id="location-dropdown" hidden>
+                <div class="location-option" data-value="Zagreb Grič/Maksimir">Zagreb Grič/Maksimir</div>
             </div>
         </div>
     </div>

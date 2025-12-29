@@ -21,6 +21,7 @@ body {
 }
 
 .widget {
+    position: relative;
     background: rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     border-radius: 24px;
@@ -99,6 +100,10 @@ body {
     text-align: center;
 }
 
+.detail-item.empty {
+    visibility: hidden;
+}
+
 .detail-label {
     font-size: 0.75rem;
     color: rgba(255, 255, 255, 0.6);
@@ -128,6 +133,88 @@ body {
     color: rgba(255, 255, 255, 0.8);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+}
+
+.location-picker {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+}
+
+.location-trigger {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.location-trigger:hover {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.location-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 8px;
+    background: rgba(20, 20, 40, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 6px;
+    min-width: 220px;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    z-index: 100;
+}
+
+/* Custom scrollbar */
+.location-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.location-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.location-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.location-dropdown::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.location-option {
+    padding: 10px 14px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-radius: 10px;
+    margin: 2px 0;
+}
+
+.location-option:hover,
+.location-option.focused {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.location-option.selected {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.location-option:first-child {
+    margin-bottom: 6px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px 10px 0 0;
 }
 
 .error {

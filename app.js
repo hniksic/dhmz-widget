@@ -52,8 +52,20 @@ const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 /** CORS proxy (vrijeme.hr doesn't send CORS headers) */
 const PROXY_URL = 'https://corsproxy.io/?';
 
-/** Stations to look for, in priority order */
-const TARGET_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
+/** Default synthetic location that prefers Grič over Maksimir */
+const DEFAULT_LOCATION = 'Zagreb Grič/Maksimir';
+
+/** Stations used for the default synthetic location */
+const ZAGREB_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
+
+/** Prefix to strip when showing station name for default location */
+const ZAGREB_PREFIX = 'Zagreb-';
+
+/** LocalStorage key for selected location */
+const LOCATION_KEY = 'dhmz-location';
+
+/** Cached station data from last fetch */
+let cachedStations = null;
 
 /** Refresh interval in milliseconds (15 minutes) */
 const REFRESH_INTERVAL = 15 * 60 * 1000;
@@ -111,24 +123,27 @@ async function fetchWeatherData() {
         const parseError = xmlDoc.querySelector('parsererror');
         if (parseError) {
             console.error('[DHMZ] XML parse error:', parseError.textContent);
+            console.error('[DHMZ] XML tail (last 500 chars):\n', xmlText.slice(-500));
             throw new Error('XML parse error');
         }
 
         const measurementTime = extractMeasurementTime(xmlDoc);
-        const stations = extractStations(xmlDoc, measurementTime);
-        console.log('[DHMZ] Found stations:', stations.map(s => s.name).join(', ') || 'none');
+        cachedStations = extractAllStations(xmlDoc, measurementTime);
+        const collator = new Intl.Collator('hr');
+        const stationNames = Object.keys(cachedStations).sort(collator.compare);
+        console.log('[DHMZ] Found stations:', stationNames.join(', ') || 'none');
 
-        if (stations.length === 0) {
-            throw new Error('Zagreb station not found');
-        }
-
-        const station = stations[0];
-        console.log('[DHMZ] Displaying:', station.name, station.temperature + '°C', measurementTime);
-        render(station);
+        updateLocationPicker(stationNames);
+        renderSelectedStation();
 
     } catch (error) {
         console.error('[DHMZ] Error:', error);
-        renderError('Greška: ' + error.message);
+        // If we have cached data, keep showing it instead of an error
+        if (cachedStations) {
+            console.log('[DHMZ] Using cached data due to fetch error');
+        } else {
+            renderError('Greška: ' + error.message);
+        }
     } finally {
         widget.classList.remove('refreshing');
     }
@@ -153,23 +168,21 @@ function extractMeasurementTime(xmlDoc) {
 }
 
 /**
- * Extracts target Zagreb stations from XML.
+ * Extracts all stations from XML.
  * @param {Document} xmlDoc
  * @param {string} measurementTime
- * @returns {StationData[]}
+ * @returns {Object<string, StationData>}
  */
-function extractStations(xmlDoc, measurementTime) {
+function extractAllStations(xmlDoc, measurementTime) {
     const stations = xmlDoc.querySelectorAll('Grad');
     /** @type {Object<string, StationData>} */
-    const found = {};
+    const result = {};
 
     stations.forEach(station => {
         const nameEl = station.querySelector('GradIme');
         if (!nameEl) return;
 
         const name = nameEl.textContent.trim();
-        if (!TARGET_STATIONS.includes(name)) return;
-
         const data = station.querySelector('Podatci');
         if (!data) return;
 
@@ -179,7 +192,7 @@ function extractStations(xmlDoc, measurementTime) {
         // Skip if no valid temperature
         if (!tempValue || tempValue === '-') return;
 
-        found[name] = {
+        result[name] = {
             name,
             temperature: parseFloat(tempValue),
             humidity: getTextOrNull(data, 'Vlaga'),
@@ -192,10 +205,186 @@ function extractStations(xmlDoc, measurementTime) {
         };
     });
 
-    // Return stations sorted by TARGET_STATIONS priority order
-    return TARGET_STATIONS
-        .filter(name => found[name])
-        .map(name => found[name]);
+    return result;
+}
+
+/**
+ * Gets station data for the selected location.
+ * @param {Object<string, StationData>} allStations
+ * @param {string} location
+ * @returns {StationData|null}
+ */
+function getStationForLocation(allStations, location) {
+    if (location === DEFAULT_LOCATION) {
+        // Synthetic location: prefer Grič, fall back to Maksimir
+        for (const name of ZAGREB_STATIONS) {
+            if (allStations[name]) return allStations[name];
+        }
+        return null;
+    }
+    return allStations[location] || null;
+}
+
+/** Get selected location from localStorage */
+function getSelectedLocation() {
+    return localStorage.getItem(LOCATION_KEY) || DEFAULT_LOCATION;
+}
+
+/** Save selected location to localStorage */
+function setSelectedLocation(location) {
+    localStorage.setItem(LOCATION_KEY, location);
+}
+
+/**
+ * Updates the location picker dropdown with available stations.
+ * @param {string[]} stationNames
+ */
+function updateLocationPicker(stationNames) {
+    const dropdown = document.getElementById('location-dropdown');
+    const currentValue = getSelectedLocation();
+
+    // Clear and rebuild options
+    dropdown.innerHTML = '';
+
+    // Add synthetic default location first
+    const allLocations = [DEFAULT_LOCATION, ...stationNames];
+
+    allLocations.forEach(name => {
+        const opt = document.createElement('div');
+        opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
+        opt.dataset.value = name;
+        opt.textContent = name;
+        opt.addEventListener('click', () => onLocationSelect(name));
+        dropdown.appendChild(opt);
+    });
+}
+
+/** Handle location selection from custom dropdown */
+function onLocationSelect(value) {
+    setSelectedLocation(value);
+    closeLocationDropdown();
+    updateDropdownSelection(value);
+    renderSelectedStation();
+}
+
+/** Toggle the location dropdown */
+function toggleLocationDropdown() {
+    const dropdown = document.getElementById('location-dropdown');
+    dropdown.hidden = !dropdown.hidden;
+}
+
+/** Close the location dropdown */
+function closeLocationDropdown() {
+    document.getElementById('location-dropdown').hidden = true;
+}
+
+/** Update visual selection state in dropdown */
+function updateDropdownSelection(value) {
+    document.querySelectorAll('.location-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.value === value);
+    });
+}
+
+// Set up dropdown toggle
+document.getElementById('location-trigger').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleLocationDropdown();
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.location-picker')) {
+        closeLocationDropdown();
+    }
+});
+
+// Keyboard navigation for dropdown
+(function() {
+    let searchBuffer = '';
+    let searchTimeout = null;
+
+    function focusOption(options, index) {
+        options.forEach((opt, i) => {
+            opt.classList.toggle('focused', i === index);
+        });
+        if (index >= 0 && options[index]) {
+            options[index].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    document.addEventListener('keydown', (e) => {
+        const dropdown = document.getElementById('location-dropdown');
+        if (dropdown.hidden) return;
+
+        const options = [...dropdown.querySelectorAll('.location-option')];
+        const currentIndex = options.findIndex(opt => opt.classList.contains('focused'));
+
+        switch (e.key) {
+            case 'Escape':
+                closeLocationDropdown();
+                e.preventDefault();
+                break;
+
+            case 'ArrowDown':
+                e.preventDefault();
+                focusOption(options, currentIndex < options.length - 1 ? currentIndex + 1 : 0);
+                break;
+
+            case 'ArrowUp':
+                e.preventDefault();
+                focusOption(options, currentIndex > 0 ? currentIndex - 1 : options.length - 1);
+                break;
+
+            case 'Enter':
+                e.preventDefault();
+                if (currentIndex >= 0) {
+                    onLocationSelect(options[currentIndex].dataset.value);
+                }
+                break;
+
+            default:
+                // Type-ahead search
+                if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    searchBuffer += e.key.toLowerCase();
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => { searchBuffer = ''; }, 500);
+
+                    const match = options.findIndex(opt =>
+                        opt.textContent.toLowerCase().startsWith(searchBuffer)
+                    );
+                    if (match >= 0) {
+                        focusOption(options, match);
+                    }
+                }
+                break;
+        }
+    });
+})();
+
+/** Render the currently selected station from cached data */
+function renderSelectedStation() {
+    if (!cachedStations) return;
+
+    let selectedLocation = getSelectedLocation();
+    let station = getStationForLocation(cachedStations, selectedLocation);
+
+    // Fall back to default if selected station no longer exists
+    if (!station && selectedLocation !== DEFAULT_LOCATION) {
+        console.warn('[DHMZ] Station not found, falling back to default:', selectedLocation);
+        selectedLocation = DEFAULT_LOCATION;
+        setSelectedLocation(selectedLocation);
+        updateDropdownSelection(selectedLocation);
+        station = getStationForLocation(cachedStations, selectedLocation);
+    }
+
+    if (!station) {
+        renderError('No station data available');
+        return;
+    }
+
+    console.log('[DHMZ] Displaying:', station.name, station.temperature + '°C');
+    render(station);
 }
 
 /**
@@ -222,36 +411,53 @@ function setText(id, text) { document.getElementById(id).textContent = text; }
 function render(station) {
     hide('error');
 
-    // Reset optional containers (they may have been shown by previous render)
-    hide('condition-container');
-    hide('humidity-container');
-    hide('pressure-container');
-    hide('wind-container');
+    // Reset optional containers
+    document.getElementById('humidity-container').classList.add('empty');
+    document.getElementById('pressure-container').classList.add('empty');
+    document.getElementById('wind-container').classList.add('empty');
+
+    const selectedLocation = getSelectedLocation();
+
+    // Update title based on selected location
+    const title = selectedLocation === DEFAULT_LOCATION ? 'Zagreb' : selectedLocation;
+    setText('title', title);
 
     setText('temperature', station.temperature.toFixed(1));
-    setText('station', station.name.replace('Zagreb-', ''));
+
+    // For default location, show actual station used (without Zagreb- prefix)
+    const displayName = selectedLocation === DEFAULT_LOCATION
+        ? station.name.replace(ZAGREB_PREFIX, '')
+        : '';
+    setText('station', displayName);
 
     // Format and display measurement time, with stale color if needed
     const { formattedTime, isStale } = formatMeasurementTime(station.measurementTime);
     const timeEl = document.getElementById('time');
-    if (formattedTime) {
-        timeEl.textContent = formattedTime;
-        timeEl.classList.toggle('stale', isStale);
-        timeEl.hidden = false;
-        document.getElementById('time-separator').hidden = false;
-    } else {
-        timeEl.hidden = true;
-        document.getElementById('time-separator').hidden = true;
-    }
+    const separatorEl = document.getElementById('time-separator');
+    const stationEl = document.getElementById('station');
+
+    // Show time if available
+    timeEl.textContent = formattedTime;
+    timeEl.classList.toggle('stale', isStale);
+    timeEl.hidden = !formattedTime;
+
+    // Show separator only if both time and station are shown
+    const showSeparator = formattedTime && displayName;
+    separatorEl.hidden = !showSeparator;
+
+    // Hide station element if empty
+    stationEl.hidden = !displayName;
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));
-        show('condition-container');
+    } else {
+        setText('condition', '—');
     }
+    show('condition-container');
 
     if (station.humidity) {
         setText('humidity', station.humidity);
-        show('humidity-container');
+        document.getElementById('humidity-container').classList.remove('empty');
     }
 
     if (station.pressure) {
@@ -259,13 +465,13 @@ function render(station) {
         const trend = station.pressureTrend;
         const arrow = trend?.startsWith('+') ? '▲' : trend?.startsWith('-') ? '▼' : '';
         setText('pressure-trend', arrow);
-        show('pressure-container');
+        document.getElementById('pressure-container').classList.remove('empty');
     }
 
     if (station.windSpeed && parseFloat(station.windSpeed) > 0) {
         const dir = (station.windDirection && station.windDirection !== 'C') ? ` ${station.windDirection}` : '';
         setText('wind', `${station.windSpeed} m/s${dir}`);
-        show('wind-container');
+        document.getElementById('wind-container').classList.remove('empty');
     }
 
     show('weather');
@@ -336,7 +542,8 @@ window.addEventListener('pageshow', refreshIfStale);
 window.addEventListener('focus', refreshIfStale);
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
+    navigator.serviceWorker.register('sw.js')
+        .catch(err => console.warn('[SW] Registration failed:', err));
 }
 
 // Tap on conditions to refresh (always fetches, no throttle)
