@@ -157,8 +157,9 @@ body {
     position: absolute;
     top: 100%;
     left: 0;
+    right: auto;
     margin-top: 8px;
-    background: rgba(20, 20, 40, 0.85);
+    background: rgba(20, 20, 40, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -189,6 +190,19 @@ body {
     background: rgba(255, 255, 255, 0.3);
 }
 
+/* Larger tap target and right-aligned dropdown on touch devices */
+@media (pointer: coarse) {
+    .location-trigger {
+        font-size: 1.5rem;
+        padding: 8px 12px;
+    }
+
+    .location-dropdown {
+        left: auto;
+        right: 0;
+    }
+}
+
 .location-option {
     padding: 10px 14px;
     color: rgba(255, 255, 255, 0.7);
@@ -210,11 +224,10 @@ body {
     color: #fff;
 }
 
-.location-option:first-child {
+.location-option:nth-child(2) {
     margin-bottom: 6px;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px 10px 0 0;
 }
 
 .error {

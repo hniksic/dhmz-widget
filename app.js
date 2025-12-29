@@ -55,6 +55,9 @@ const PROXY_URL = 'https://corsproxy.io/?';
 /** Default synthetic location that prefers Grič over Maksimir */
 const DEFAULT_LOCATION = 'Zagreb Grič/Maksimir';
 
+/** Synthetic location that uses geolocation to find nearest station */
+const DETECTED_LOCATION = 'Nearest';
+
 /** Stations used for the default synthetic location */
 const ZAGREB_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
 
@@ -66,6 +69,9 @@ const LOCATION_KEY = 'dhmz-location';
 
 /** Cached station data from last fetch */
 let cachedStations = null;
+
+/** Cached user coordinates from geolocation */
+let userCoords = null;
 
 /** Refresh interval in milliseconds (15 minutes) */
 const REFRESH_INTERVAL = 15 * 60 * 1000;
@@ -79,6 +85,8 @@ const SHOW_DATE_THRESHOLD_MS = 23 * 60 * 60 * 1000;
 /**
  * @typedef {Object} StationData
  * @property {string} name - Station name
+ * @property {number} lat - Latitude
+ * @property {number} lon - Longitude
  * @property {number} temperature - Temperature in °C
  * @property {string|null} humidity - Relative humidity %
  * @property {string|null} pressure - Atmospheric pressure in hPa
@@ -134,6 +142,7 @@ async function fetchWeatherData() {
         console.log('[DHMZ] Found stations:', stationNames.join(', ') || 'none');
 
         updateLocationPicker(stationNames);
+        requestGeolocation();
         renderSelectedStation();
 
     } catch (error) {
@@ -183,6 +192,8 @@ function extractAllStations(xmlDoc, measurementTime) {
         if (!nameEl) return;
 
         const name = nameEl.textContent.trim();
+        const lat = parseFloat(station.querySelector('Lat')?.textContent);
+        const lon = parseFloat(station.querySelector('Lon')?.textContent);
         const data = station.querySelector('Podatci');
         if (!data) return;
 
@@ -194,6 +205,8 @@ function extractAllStations(xmlDoc, measurementTime) {
 
         result[name] = {
             name,
+            lat,
+            lon,
             temperature: parseFloat(tempValue),
             humidity: getTextOrNull(data, 'Vlaga'),
             pressure: getTextOrNull(data, 'Tlak'),
@@ -222,7 +235,62 @@ function getStationForLocation(allStations, location) {
         }
         return null;
     }
+    if (location === DETECTED_LOCATION) {
+        // Use geolocation to find nearest station
+        if (userCoords) {
+            const nearest = findNearestStation(allStations, userCoords.lat, userCoords.lon);
+            return nearest ? allStations[nearest] : null;
+        }
+        return null;
+    }
     return allStations[location] || null;
+}
+
+/**
+ * Calculates distance between two coordinates using Haversine formula.
+ * @param {number} lat1
+ * @param {number} lon1
+ * @param {number} lat2
+ * @param {number} lon2
+ * @returns {number} Distance in kilometers
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const toRad = deg => deg * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Finds the nearest station to given coordinates.
+ * @param {Object<string, StationData>} stations
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {string|null} Station name, or null if none found
+ */
+function findNearestStation(stations, lat, lon) {
+    let nearest = null;
+    let minDist = Infinity;
+
+    for (const [name, station] of Object.entries(stations)) {
+        if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
+        const dist = haversineDistance(lat, lon, station.lat, station.lon);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = name;
+        }
+    }
+
+    console.log('[DHMZ] Nearest station:', nearest, `(${minDist.toFixed(1)} km)`);
+    return nearest;
+}
+
+/** Check if user has explicitly chosen a location */
+function hasSelectedLocation() {
+    return localStorage.getItem(LOCATION_KEY) !== null;
 }
 
 /** Get selected location from localStorage */
@@ -236,6 +304,43 @@ function setSelectedLocation(location) {
 }
 
 /**
+ * Request user's geolocation and cache coordinates.
+ * On first visit, auto-selects "Nearest" location.
+ */
+function requestGeolocation() {
+    if (!('geolocation' in navigator)) {
+        console.log('[DHMZ] Geolocation not available');
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            userCoords = {
+                lat: position.coords.latitude,
+                lon: position.coords.longitude
+            };
+            console.log('[DHMZ] User location:', userCoords.lat.toFixed(4), userCoords.lon.toFixed(4));
+
+            // On first visit, auto-select "Nearest"
+            if (!hasSelectedLocation()) {
+                setSelectedLocation(DETECTED_LOCATION);
+            }
+
+            // Update dropdown and re-render if "Nearest" is selected
+            updateDetectedDropdownOption();
+            if (getSelectedLocation() === DETECTED_LOCATION) {
+                updateDropdownSelection(DETECTED_LOCATION);
+                renderSelectedStation();
+            }
+        },
+        (error) => {
+            console.log('[DHMZ] Geolocation denied or failed:', error.message);
+        },
+        { timeout: 10000, maximumAge: 300000 }
+    );
+}
+
+/**
  * Updates the location picker dropdown with available stations.
  * @param {string[]} stationNames
  */
@@ -246,17 +351,42 @@ function updateLocationPicker(stationNames) {
     // Clear and rebuild options
     dropdown.innerHTML = '';
 
-    // Add synthetic default location first
-    const allLocations = [DEFAULT_LOCATION, ...stationNames];
+    // Add synthetic locations first, then all stations
+    const allLocations = [DETECTED_LOCATION, DEFAULT_LOCATION, ...stationNames];
 
     allLocations.forEach(name => {
         const opt = document.createElement('div');
         opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
         opt.dataset.value = name;
-        opt.textContent = name;
+        opt.textContent = getDropdownLabel(name);
         opt.addEventListener('click', () => onLocationSelect(name));
         dropdown.appendChild(opt);
     });
+}
+
+/**
+ * Gets the display label for a dropdown option.
+ * @param {string} location
+ * @returns {string}
+ */
+function getDropdownLabel(location) {
+    if (location === DETECTED_LOCATION) {
+        if (userCoords && cachedStations) {
+            const nearest = findNearestStation(cachedStations, userCoords.lat, userCoords.lon);
+            if (nearest) return `Nearest (${nearest})`;
+        }
+        return 'Nearest';
+    }
+    return location;
+}
+
+/** Update the "Nearest" dropdown option text after geolocation resolves */
+function updateDetectedDropdownOption() {
+    const dropdown = document.getElementById('location-dropdown');
+    const opt = dropdown.querySelector(`[data-value="${DETECTED_LOCATION}"]`);
+    if (opt) {
+        opt.textContent = getDropdownLabel(DETECTED_LOCATION);
+    }
 }
 
 /** Handle location selection from custom dropdown */
@@ -370,12 +500,18 @@ function renderSelectedStation() {
     let station = getStationForLocation(cachedStations, selectedLocation);
 
     // Fall back to default if selected station no longer exists
-    if (!station && selectedLocation !== DEFAULT_LOCATION) {
+    // (but don't overwrite DETECTED_LOCATION - coords may arrive later)
+    if (!station && selectedLocation !== DEFAULT_LOCATION && selectedLocation !== DETECTED_LOCATION) {
         console.warn('[DHMZ] Station not found, falling back to default:', selectedLocation);
         selectedLocation = DEFAULT_LOCATION;
         setSelectedLocation(selectedLocation);
         updateDropdownSelection(selectedLocation);
         station = getStationForLocation(cachedStations, selectedLocation);
+    }
+
+    // Temporarily show default if "Nearest" selected but no coords yet
+    if (!station && selectedLocation === DETECTED_LOCATION) {
+        station = getStationForLocation(cachedStations, DEFAULT_LOCATION);
     }
 
     if (!station) {
@@ -419,7 +555,14 @@ function render(station) {
     const selectedLocation = getSelectedLocation();
 
     // Update title based on selected location
-    const title = selectedLocation === DEFAULT_LOCATION ? 'Zagreb' : selectedLocation;
+    let title;
+    if (selectedLocation === DEFAULT_LOCATION) {
+        title = 'Zagreb';
+    } else if (selectedLocation === DETECTED_LOCATION) {
+        title = station.name;
+    } else {
+        title = selectedLocation;
+    }
     setText('title', title);
 
     setText('temperature', station.temperature.toFixed(1));
