@@ -18,7 +18,7 @@
  * - Bump version whenever deploying changes to cached files
  */
 
-const CACHE_NAME = 'zagreb-temp-v14';
+const CACHE_NAME = 'zagreb-temp-v15';
 
 const ASSETS = [
   './',
