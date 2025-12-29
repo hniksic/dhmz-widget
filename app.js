@@ -220,7 +220,7 @@ function render(station) {
     // Show stale indicator if data is from a previous hour
     const stale = isDataStale(station.measurementTime);
     const timeEl = document.getElementById('time');
-    timeEl.textContent = station.measurementTime || '';
+    timeEl.textContent = formatMeasurementTime(station.measurementTime);
     timeEl.classList.toggle('stale', stale);
 
     if (station.condition) {
@@ -262,23 +262,53 @@ function renderError(message) {
 }
 
 /**
+ * Parses measurement time string into a Date object.
+ * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
+ * @returns {Date|null}
+ */
+function parseMeasurementTime(measurementTime) {
+    if (!measurementTime) return null;
+
+    const match = measurementTime.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):00/);
+    if (!match) return null;
+
+    const [, day, month, year, hour] = match;
+    return new Date(year, month - 1, day, hour);
+}
+
+/**
  * Checks if measurement data is stale (from a previous hour).
  * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
  * @returns {boolean}
  */
 function isDataStale(measurementTime) {
-    if (!measurementTime) return false;
+    const measurementDate = parseMeasurementTime(measurementTime);
+    if (!measurementDate) return false;
 
-    // Parse measurement time: "27.12.2025 14:00"
-    const match = measurementTime.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):00/);
-    if (!match) return false;
+    return Date.now() - measurementDate > 60 * 60 * 1000;
+}
 
-    const [, day, month, year, hour] = match;
-    const measurementDate = new Date(year, month - 1, day, hour);
-    const now = new Date();
+/**
+ * Formats measurement time for display.
+ * Shows just hour normally, or date (without year) if data is > 23 hours old.
+ * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
+ * @returns {string}
+ */
+function formatMeasurementTime(measurementTime) {
+    const measurementDate = parseMeasurementTime(measurementTime);
+    if (!measurementDate) return measurementTime || '';
 
-    // Data is stale if measurement is from a previous hour
-    return now - measurementDate > 60 * 60 * 1000;
+    const ageMs = Date.now() - measurementDate;
+    const hour = measurementDate.getHours().toString().padStart(2, '0');
+
+    if (ageMs > 23 * 60 * 60 * 1000) {
+        // Very old: show date without year
+        const day = measurementDate.getDate().toString().padStart(2, '0');
+        const month = (measurementDate.getMonth() + 1).toString().padStart(2, '0');
+        return `${day}.${month}. ${hour}:00`;
+    }
+
+    return `${hour}:00`;
 }
 
 // --- Initialization ---

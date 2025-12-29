@@ -6,9 +6,9 @@
  * - Caches static assets for offline use and faster loads
  *
  * Caching strategy:
- * - HTML/JS: Network-first, fall back to cache if offline
+ * - HTML/JS/CSS: Network-first, fall back to cache if offline
  *   (ensures updates are visible immediately on reload)
- * - CSS/images: Cache-first, fall back to network
+ * - Images: Cache-first, fall back to network
  *   (these change rarely, so prefer speed)
  * - Weather API: Never cached (always need fresh data)
  *
@@ -18,7 +18,7 @@
  * - Bump version whenever deploying changes to cached files
  */
 
-const CACHE_NAME = 'zagreb-temp-v9';
+const CACHE_NAME = 'zagreb-temp-v11';
 
 const ASSETS = [
   './',
@@ -75,9 +75,9 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // HTML and JS: network-first strategy
+  // HTML, JS, CSS: network-first strategy
   // Try network, update cache, fall back to cache if offline
-  if (url.endsWith('.html') || url.endsWith('.js') || url.endsWith('/')) {
+  if (url.endsWith('.html') || url.endsWith('.js') || url.endsWith('.css') || url.endsWith('/')) {
     event.respondWith(
       fetch(event.request)
         .then(response => {
@@ -94,7 +94,7 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Everything else (CSS, images): cache-first strategy
+  // Everything else (images): cache-first strategy
   // Serve from cache if available, otherwise fetch from network
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))
