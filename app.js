@@ -50,7 +50,7 @@
 const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 
 /** CORS proxy (vrijeme.hr doesn't send CORS headers) */
-const PROXY_URL = 'https://api.allorigins.win/raw?url=';
+const PROXY_URL = 'https://corsproxy.io/?';
 
 /** Stations to look for, in priority order */
 const TARGET_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
