@@ -215,8 +215,13 @@ function render(station) {
     hide('error');
 
     setText('temperature', station.temperature.toFixed(1));
-    setText('time', station.measurementTime || '');
     setText('station', station.displayName);
+
+    // Show stale indicator if data is from a previous hour
+    const stale = isDataStale(station.measurementTime);
+    const timeEl = document.getElementById('time');
+    timeEl.textContent = station.measurementTime || '';
+    timeEl.classList.toggle('stale', stale);
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));
@@ -256,10 +261,37 @@ function renderError(message) {
     show('error');
 }
 
+/**
+ * Checks if measurement data is stale (from a previous hour).
+ * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
+ * @returns {boolean}
+ */
+function isDataStale(measurementTime) {
+    if (!measurementTime) return false;
+
+    // Parse measurement time: "27.12.2025 14:00"
+    const match = measurementTime.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):00/);
+    if (!match) return false;
+
+    const [, day, month, year, hour] = match;
+    const measurementDate = new Date(year, month - 1, day, hour);
+    const now = new Date();
+
+    // Data is stale if measurement is from a previous hour
+    return now - measurementDate > 60 * 60 * 1000;
+}
+
 // --- Initialization ---
 
 fetchWeatherData();
 setInterval(fetchWeatherData, REFRESH_INTERVAL);
+
+// Auto-refresh when returning to the app (mobile)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        fetchWeatherData();
+    }
+});
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');

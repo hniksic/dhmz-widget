@@ -78,6 +78,15 @@ body {
     margin-top: 4px;
 }
 
+.stale {
+    color: rgba(255, 200, 100, 0.7);
+}
+
+.stale::after {
+    content: ' (staro)';
+    font-size: 0.75rem;
+}
+
 .details {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
