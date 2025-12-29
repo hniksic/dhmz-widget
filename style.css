@@ -14,7 +14,7 @@ body {
     align-items: center;
     padding: 20px;
     color: #fff;
-    overflow: hidden;
+    overscroll-behavior: none; /* prevents bounce but allows pull-to-refresh */
 }
 
 .widget {

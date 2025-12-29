@@ -298,12 +298,21 @@ function formatMeasurementTime(measurementTime) {
 fetchWeatherData();
 setInterval(fetchWeatherData, REFRESH_INTERVAL);
 
-// Auto-refresh when returning to the app (mobile)
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
+// Auto-refresh when returning to the app (mobile PWA)
+// Multiple events for reliability; throttled to avoid duplicate fetches
+let lastRefresh = 0;
+function refreshIfStale() {
+    const now = Date.now();
+    if (now - lastRefresh > 5000) {
+        lastRefresh = now;
         fetchWeatherData();
     }
+}
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') refreshIfStale();
 });
+window.addEventListener('pageshow', refreshIfStale);
+window.addEventListener('focus', refreshIfStale);
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
