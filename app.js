@@ -58,12 +58,19 @@ const TARGET_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
 /** Refresh interval in milliseconds (15 minutes) */
 const REFRESH_INTERVAL = 15 * 60 * 1000;
 
+/** Data older than this is considered stale (1 hour) */
+const STALE_THRESHOLD_MS = 60 * 60 * 1000;
+
+/** Data older than this should show date, not just hour (23 hours) */
+const SHOW_DATE_THRESHOLD_MS = 23 * 60 * 60 * 1000;
+
 /**
  * @typedef {Object} StationData
  * @property {string} name - Station name
  * @property {number} temperature - Temperature in °C
  * @property {string|null} humidity - Relative humidity %
  * @property {string|null} pressure - Atmospheric pressure in hPa
+ * @property {string|null} pressureTrend - Pressure tendency (+/- value)
  * @property {string|null} windDirection - Wind direction
  * @property {string|null} windSpeed - Wind speed in m/s
  * @property {string|null} condition - Weather condition description
@@ -104,8 +111,8 @@ async function fetchWeatherData() {
             throw new Error('Zagreb station not found');
         }
 
-        const displayData = prepareDisplayData(stations);
-        render(displayData);
+        const station = stations[0];
+        render(station);
 
     } catch (error) {
         renderError('Greška: ' + error.message);
@@ -188,19 +195,6 @@ function getTextOrNull(parent, selector) {
     return (text && text !== '-') ? text : null;
 }
 
-/**
- * Prepares data for display. Uses first available station (Grič preferred).
- * @param {StationData[]} stations
- * @returns {StationData}
- */
-function prepareDisplayData(stations) {
-    const station = stations[0];
-    return {
-        ...station,
-        displayName: station.name.replace('Zagreb-', '')
-    };
-}
-
 /** Helper to show/hide an element */
 function show(id) { document.getElementById(id).hidden = false; }
 function hide(id) { document.getElementById(id).hidden = true; }
@@ -214,14 +208,20 @@ function render(station) {
     hide('loading');
     hide('error');
 
-    setText('temperature', station.temperature.toFixed(1));
-    setText('station', station.displayName);
+    // Reset optional containers (they may have been shown by previous render)
+    hide('condition-container');
+    hide('humidity-container');
+    hide('pressure-container');
+    hide('wind-container');
 
-    // Show stale indicator if data is from a previous hour
-    const stale = isDataStale(station.measurementTime);
+    setText('temperature', station.temperature.toFixed(1));
+    setText('station', station.name.replace('Zagreb-', ''));
+
+    // Format and display measurement time, with stale indicator if needed
+    const { formattedTime, isStale } = formatMeasurementTime(station.measurementTime);
     const timeEl = document.getElementById('time');
-    timeEl.textContent = formatMeasurementTime(station.measurementTime);
-    timeEl.classList.toggle('stale', stale);
+    timeEl.textContent = formattedTime;
+    timeEl.classList.toggle('stale', isStale);
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));
@@ -262,53 +262,34 @@ function renderError(message) {
 }
 
 /**
- * Parses measurement time string into a Date object.
+ * Formats measurement time for display and checks if data is stale.
+ * Parses the time once and returns both formatted string and stale status.
  * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
- * @returns {Date|null}
- */
-function parseMeasurementTime(measurementTime) {
-    if (!measurementTime) return null;
-
-    const match = measurementTime.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):00/);
-    if (!match) return null;
-
-    const [, day, month, year, hour] = match;
-    return new Date(year, month - 1, day, hour);
-}
-
-/**
- * Checks if measurement data is stale (from a previous hour).
- * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
- * @returns {boolean}
- */
-function isDataStale(measurementTime) {
-    const measurementDate = parseMeasurementTime(measurementTime);
-    if (!measurementDate) return false;
-
-    return Date.now() - measurementDate > 60 * 60 * 1000;
-}
-
-/**
- * Formats measurement time for display.
- * Shows just hour normally, or date (without year) if data is > 23 hours old.
- * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
- * @returns {string}
+ * @returns {{formattedTime: string, isStale: boolean}}
  */
 function formatMeasurementTime(measurementTime) {
-    const measurementDate = parseMeasurementTime(measurementTime);
-    if (!measurementDate) return measurementTime || '';
-
-    const ageMs = Date.now() - measurementDate;
-    const hour = measurementDate.getHours().toString().padStart(2, '0');
-
-    if (ageMs > 23 * 60 * 60 * 1000) {
-        // Very old: show date without year
-        const day = measurementDate.getDate().toString().padStart(2, '0');
-        const month = (measurementDate.getMonth() + 1).toString().padStart(2, '0');
-        return `${day}.${month}. ${hour}:00`;
+    if (!measurementTime) {
+        return { formattedTime: '', isStale: false };
     }
 
-    return `${hour}:00`;
+    const match = measurementTime.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):00/);
+    if (!match) {
+        return { formattedTime: measurementTime, isStale: false };
+    }
+
+    const [, day, month, year, hour] = match;
+    const measurementDate = new Date(year, month - 1, day, hour);
+    const ageMs = Date.now() - measurementDate;
+
+    const hourStr = measurementDate.getHours().toString().padStart(2, '0');
+    const formattedTime = ageMs > SHOW_DATE_THRESHOLD_MS
+        ? `${day}.${month}. ${hourStr}:00`
+        : `${hourStr}:00`;
+
+    return {
+        formattedTime,
+        isStale: ageMs > STALE_THRESHOLD_MS
+    };
 }
 
 // --- Initialization ---
