@@ -84,16 +84,22 @@ async function fetchWeatherData() {
     const cacheBuster = `?_=${Date.now()}`;
     const fetchUrl = PROXY_URL + encodeURIComponent(DHMZ_XML_URL + cacheBuster);
 
+    console.log('[DHMZ] Fetching weather data...');
+
     try {
         const response = await fetch(fetchUrl);
+        console.log('[DHMZ] Response status:', response.status);
+
         if (!response.ok) {
             throw new Error(`HTTP error: ${response.status}`);
         }
 
         const xmlText = await response.text();
+        console.log('[DHMZ] Response length:', xmlText.length, 'chars');
 
         // Verify we got XML, not an error page
         if (!xmlText.startsWith('<?xml')) {
+            console.error('[DHMZ] Invalid response (not XML):', xmlText.substring(0, 200));
             throw new Error('Invalid response from proxy');
         }
 
@@ -102,20 +108,24 @@ async function fetchWeatherData() {
         // Check for XML parse errors
         const parseError = xmlDoc.querySelector('parsererror');
         if (parseError) {
+            console.error('[DHMZ] XML parse error:', parseError.textContent);
             throw new Error('XML parse error');
         }
 
         const measurementTime = extractMeasurementTime(xmlDoc);
         const stations = extractStations(xmlDoc, measurementTime);
+        console.log('[DHMZ] Found stations:', stations.map(s => s.name).join(', ') || 'none');
 
         if (stations.length === 0) {
             throw new Error('Zagreb station not found');
         }
 
         const station = stations[0];
+        console.log('[DHMZ] Displaying:', station.name, station.temperature + '°C', measurementTime);
         render(station);
 
     } catch (error) {
+        console.error('[DHMZ] Error:', error);
         renderError('Greška: ' + error.message);
     }
 }
