@@ -162,6 +162,7 @@ function extractStations(xmlDoc, measurementTime) {
             temperature: parseFloat(tempValue),
             humidity: getTextOrNull(data, 'Vlaga'),
             pressure: getTextOrNull(data, 'Tlak'),
+            pressureTrend: getTextOrNull(data, 'TlakTend'),
             windDirection: getTextOrNull(data, 'VjetarSmjer'),
             windSpeed: getTextOrNull(data, 'VjetarBrzina'),
             condition: getTextOrNull(data, 'Vrijeme'),
@@ -225,7 +226,9 @@ function render(station) {
     }
 
     if (station.pressure) {
-        setText('pressure', station.pressure);
+        const trend = station.pressureTrend;
+        const arrow = trend?.startsWith('+') ? ' ↑' : trend?.startsWith('-') ? ' ↓' : '';
+        setText('pressure', station.pressure + arrow);
         show('pressure-container');
     }
 
