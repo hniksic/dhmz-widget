@@ -6,11 +6,11 @@
  */
 
 /*
- * VRIJEME.HR XML STRUCTURE (https://vrijeme.hr/hrvatska_n.xml)
- * ============================================================
+ * VRIJEME.HR XML STRUCTURE (https://vrijeme.hr/hrvatska1_n.xml)
+ * =============================================================
  *
- * The XML contains current weather observations for stations across Croatia.
- * Data is typically updated hourly.
+ * The XML contains current weather observations for stations across Croatia,
+ * organized by region. Data is typically updated hourly.
  *
  * Expected structure:
  *
@@ -38,9 +38,9 @@
  *   <!-- More <Grad> elements... -->
  * </Hrvatska>
  *
- * Zagreb stations we look for:
- * - "Zagreb-Maksimir" (primary, always present)
- * - "Zagreb-Grič" (historic station, not currently in this feed)
+ * Zagreb stations we look for (in priority order):
+ * - "Zagreb-Grič" (preferred, historic city center station)
+ * - "Zagreb-Maksimir" (fallback, in a large park)
  *
  * Note: "Zagreb-aerodrom" also exists but is intentionally ignored
  * as we want city center measurements.
@@ -170,7 +170,10 @@ function extractStations(xmlDoc, measurementTime) {
         };
     });
 
-    return Object.values(found);
+    // Return stations sorted by TARGET_STATIONS priority order
+    return TARGET_STATIONS
+        .filter(name => found[name])
+        .map(name => found[name]);
 }
 
 /**
