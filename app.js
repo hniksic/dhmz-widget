@@ -83,7 +83,9 @@ const SHOW_DATE_THRESHOLD_MS = 23 * 60 * 60 * 1000;
 async function fetchWeatherData() {
     const cacheBuster = `?_=${Date.now()}`;
     const fetchUrl = PROXY_URL + encodeURIComponent(DHMZ_XML_URL + cacheBuster);
+    const widget = document.getElementById('widget');
 
+    widget.classList.add('refreshing');
     console.log('[DHMZ] Fetching weather data...');
 
     try {
@@ -127,6 +129,8 @@ async function fetchWeatherData() {
     } catch (error) {
         console.error('[DHMZ] Error:', error);
         renderError('Greška: ' + error.message);
+    } finally {
+        widget.classList.remove('refreshing');
     }
 }
 
