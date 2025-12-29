@@ -46,12 +46,6 @@ body {
 .header h1 {
     font-size: 1.5rem;
     font-weight: 600;
-    margin-bottom: 4px;
-}
-
-.header .subtitle {
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.7);
 }
 
 .temperature-display {
