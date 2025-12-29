@@ -226,9 +226,10 @@ function render(station) {
     }
 
     if (station.pressure) {
+        setText('pressure', station.pressure);
         const trend = station.pressureTrend;
-        const arrow = trend?.startsWith('+') ? ' ↑' : trend?.startsWith('-') ? ' ↓' : '';
-        setText('pressure', station.pressure + arrow);
+        const arrow = trend?.startsWith('+') ? '▲' : trend?.startsWith('-') ? '▼' : '';
+        setText('pressure-trend', arrow);
         show('pressure-container');
     }
 
