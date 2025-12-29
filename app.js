@@ -81,7 +81,8 @@ const SHOW_DATE_THRESHOLD_MS = 23 * 60 * 60 * 1000;
  * Fetches weather data from DHMZ via CORS proxy and updates the display.
  */
 async function fetchWeatherData() {
-    const fetchUrl = PROXY_URL + encodeURIComponent(DHMZ_XML_URL);
+    const cacheBuster = `?_=${Date.now()}`;
+    const fetchUrl = PROXY_URL + encodeURIComponent(DHMZ_XML_URL + cacheBuster);
 
     try {
         const response = await fetch(fetchUrl);
