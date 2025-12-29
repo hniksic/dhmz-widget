@@ -29,8 +29,6 @@ body {
     max-width: 400px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent; /* no tap flash on mobile */
     transition: opacity 0.15s;
 }
 
@@ -88,11 +86,6 @@ body {
     color: rgba(255, 200, 100, 0.7);
 }
 
-.stale::after {
-    content: ' (staro)';
-    font-size: 0.75rem;
-}
-
 .details {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -117,6 +110,7 @@ body {
 .detail-value {
     font-size: 1.125rem;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .trend {
@@ -132,6 +126,8 @@ body {
     border-radius: 12px;
     font-size: 0.9rem;
     color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .error {

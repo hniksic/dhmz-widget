@@ -231,11 +231,18 @@ function render(station) {
     setText('temperature', station.temperature.toFixed(1));
     setText('station', station.name.replace('Zagreb-', ''));
 
-    // Format and display measurement time, with stale indicator if needed
+    // Format and display measurement time, with stale color if needed
     const { formattedTime, isStale } = formatMeasurementTime(station.measurementTime);
     const timeEl = document.getElementById('time');
-    timeEl.textContent = formattedTime;
-    timeEl.classList.toggle('stale', isStale);
+    if (formattedTime) {
+        timeEl.textContent = formattedTime;
+        timeEl.classList.toggle('stale', isStale);
+        timeEl.hidden = false;
+        document.getElementById('time-separator').hidden = false;
+    } else {
+        timeEl.hidden = true;
+        document.getElementById('time-separator').hidden = true;
+    }
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));
@@ -248,7 +255,7 @@ function render(station) {
     }
 
     if (station.pressure) {
-        setText('pressure', station.pressure);
+        setText('pressure', Math.round(parseFloat(station.pressure)));
         const trend = station.pressureTrend;
         const arrow = trend?.startsWith('+') ? '▲' : trend?.startsWith('-') ? '▼' : '';
         setText('pressure-trend', arrow);
@@ -294,10 +301,10 @@ function formatMeasurementTime(measurementTime) {
     const measurementDate = new Date(year, month - 1, day, hour);
     const ageMs = Date.now() - measurementDate;
 
-    const hourStr = measurementDate.getHours().toString().padStart(2, '0');
+    // Omit time entirely if very old, otherwise show as "19h"
     const formattedTime = ageMs > SHOW_DATE_THRESHOLD_MS
-        ? `${day}.${month}. ${hourStr}:00`
-        : `${hourStr}:00`;
+        ? ''
+        : `${measurementDate.getHours()}h`;
 
     return {
         formattedTime,
@@ -332,5 +339,5 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js');
 }
 
-// Tap anywhere on widget to refresh (always fetches, no throttle)
-document.getElementById('widget').addEventListener('click', fetchWeatherData);
+// Tap on conditions to refresh (always fetches, no throttle)
+document.getElementById('condition-container').addEventListener('click', fetchWeatherData);
