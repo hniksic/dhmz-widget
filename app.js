@@ -930,6 +930,82 @@ function resetMapZoom() {
     mapZoom = { scale: 1, x: 0, y: 0 };
 }
 
+/** Pinch-to-zoom state */
+let pinchState = null;
+
+/** Get distance between two touch points */
+function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+/** Get center point between two touches */
+function getTouchCenter(touches) {
+    return {
+        clientX: (touches[0].clientX + touches[1].clientX) / 2,
+        clientY: (touches[0].clientY + touches[1].clientY) / 2
+    };
+}
+
+/** Handle touch start for pinch zoom */
+function onMapTouchStart(event) {
+    if (event.touches.length === 2) {
+        event.preventDefault();
+        pinchState = {
+            initialDistance: getTouchDistance(event.touches),
+            initialScale: mapZoom.scale
+        };
+    }
+}
+
+/** Handle touch move for pinch zoom */
+function onMapTouchMove(event) {
+    if (event.touches.length === 2 && pinchState) {
+        event.preventDefault();
+
+        const currentDistance = getTouchDistance(event.touches);
+        const scaleChange = currentDistance / pinchState.initialDistance;
+        const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchState.initialScale * scaleChange));
+
+        if (newScale === mapZoom.scale) return;
+
+        // Get pinch center in SVG coordinates
+        const center = getTouchCenter(event.touches);
+        const svg = document.getElementById('station-map');
+        const rect = svg.getBoundingClientRect();
+        const centerX = (center.clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
+        const centerY = (center.clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
+
+        // Convert center to base coordinates
+        const baseCenterX = centerX / mapZoom.scale + mapZoom.x;
+        const baseCenterY = centerY / mapZoom.scale + mapZoom.y;
+
+        // Update scale
+        const oldScale = mapZoom.scale;
+        mapZoom.scale = newScale;
+
+        // Adjust pan to keep pinch center fixed
+        mapZoom.x = baseCenterX - centerX / newScale;
+        mapZoom.y = baseCenterY - centerY / newScale;
+
+        // Clamp pan
+        const visibleWidth = MAP_CONFIG.viewBox.width / newScale;
+        const visibleHeight = MAP_CONFIG.viewBox.height / newScale;
+        mapZoom.x = Math.max(0, Math.min(mapZoom.x, MAP_CONFIG.viewBox.width - visibleWidth));
+        mapZoom.y = Math.max(0, Math.min(mapZoom.y, MAP_CONFIG.viewBox.height - visibleHeight));
+
+        updateCirclePositions();
+    }
+}
+
+/** Handle touch end for pinch zoom */
+function onMapTouchEnd(event) {
+    if (event.touches.length < 2) {
+        pinchState = null;
+    }
+}
+
 /** Handle mouse wheel zoom */
 function onMapWheel(event) {
     event.preventDefault();
@@ -1057,16 +1133,25 @@ document.getElementById('map-close').addEventListener('click', closeMapModal);
 const stationMap = document.getElementById('station-map');
 stationMap.addEventListener('mousemove', onMapPointerMove);
 stationMap.addEventListener('touchmove', (e) => {
-    e.preventDefault(); // Prevent scrolling
+    // Handle pinch zoom with two fingers
+    if (e.touches.length === 2) {
+        onMapTouchMove(e);
+        return;
+    }
+    // Single finger - prehighlight
+    e.preventDefault();
     onMapPointerMove(e);
 }, { passive: false });
-stationMap.addEventListener('click', onMapClick);
+stationMap.addEventListener('touchstart', onMapTouchStart, { passive: false });
 stationMap.addEventListener('touchend', (e) => {
-    if (prehighlightedStation) {
+    onMapTouchEnd(e);
+    // Select station on single tap if prehighlighted
+    if (e.touches.length === 0 && prehighlightedStation && !pinchState) {
         e.preventDefault();
         selectStationFromMap(prehighlightedStation);
     }
 });
+stationMap.addEventListener('click', onMapClick);
 stationMap.addEventListener('mouseleave', () => {
     clearPrehighlight();
     hideMapTooltip();
