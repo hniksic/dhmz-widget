@@ -1,7 +1,7 @@
 {
-  "name": "Zagreb Temperatura",
-  "short_name": "Zagreb",
-  "description": "Trenutna temperatura u Zagrebu (DHMZ)",
+  "name": "DHMZ Vrijeme",
+  "short_name": "Vrijeme",
+  "description": "Trenutno vrijeme u Hrvatskoj (DHMZ)",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
