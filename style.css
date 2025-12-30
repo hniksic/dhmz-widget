@@ -144,6 +144,7 @@ body {
     fill: rgba(255, 255, 255, 0.08);
     stroke: rgba(255, 255, 255, 0.2);
     stroke-width: 1;
+    vector-effect: non-scaling-stroke;
 }
 
 .station-dot {
@@ -167,6 +168,10 @@ body {
 
 .station-dot.selected.prehighlight,
 .station-dot.selected.prehighlight:hover {
+    fill: #ffdd57;
+}
+
+.station-dot.tapped {
     fill: #ffdd57;
 }
 
@@ -202,6 +207,21 @@ body {
     pointer-events: none;
     white-space: nowrap;
     z-index: 20;
+}
+
+.station-label {
+    position: absolute;
+    background: rgba(255, 221, 87, 0.95);
+    color: #1a1a2e;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 21;
+    transform: translateX(-50%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .details {

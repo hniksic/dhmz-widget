@@ -857,6 +857,11 @@ function updateCirclePositions() {
 
     // Update outline transform
     updateOutlineTransform();
+
+    // Update station label position if one is shown
+    if (tappedStation) {
+        showStationLabel(tappedStation);
+    }
 }
 
 /** Handle station selection from map */
@@ -936,6 +941,15 @@ function resetMapZoom() {
 /** Pinch-to-zoom state */
 let pinchState = null;
 
+/** Pan/drag state */
+let panState = null;
+
+/** Tracks if a gesture (pinch/pan) occurred during current touch sequence */
+let gestureOccurred = false;
+
+/** Currently tapped station (for two-tap selection) */
+let tappedStation = null;
+
 /** Get distance between two touch points */
 function getTouchDistance(touches) {
     const dx = touches[0].clientX - touches[1].clientX;
@@ -951,18 +965,34 @@ function getTouchCenter(touches) {
     };
 }
 
-/** Handle touch start for pinch zoom */
+/** Handle touch start for pinch zoom and pan */
 function onMapTouchStart(event) {
     if (event.touches.length === 2) {
         event.preventDefault();
+        // Cancel any pan in progress
+        panState = null;
         pinchState = {
             initialDistance: getTouchDistance(event.touches),
-            initialScale: mapZoom.scale
+            initialScale: mapZoom.scale,
+            initialX: mapZoom.x,
+            initialY: mapZoom.y,
+            initialCenter: getTouchCenter(event.touches)
+        };
+    } else if (event.touches.length === 1 && mapZoom.scale > 1) {
+        // Start pan when zoomed in
+        event.preventDefault();
+        const touch = event.touches[0];
+        panState = {
+            startX: touch.clientX,
+            startY: touch.clientY,
+            initialZoomX: mapZoom.x,
+            initialZoomY: mapZoom.y,
+            moved: false
         };
     }
 }
 
-/** Handle touch move for pinch zoom */
+/** Handle touch move for pinch zoom and pan */
 function onMapTouchMove(event) {
     if (event.touches.length === 2 && pinchState) {
         event.preventDefault();
@@ -971,45 +1001,91 @@ function onMapTouchMove(event) {
         const scaleChange = currentDistance / pinchState.initialDistance;
         const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchState.initialScale * scaleChange));
 
-        if (newScale === mapZoom.scale) return;
-
-        // Get pinch center in SVG coordinates
+        // Get current pinch center
         const center = getTouchCenter(event.touches);
         const svg = document.getElementById('station-map');
         const rect = svg.getBoundingClientRect();
-        const centerX = (center.clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
-        const centerY = (center.clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
 
-        // Convert center to base coordinates
-        const baseCenterX = centerX / mapZoom.scale + mapZoom.x;
-        const baseCenterY = centerY / mapZoom.scale + mapZoom.y;
+        // Calculate pan delta from initial pinch center
+        const centerDeltaX = (center.clientX - pinchState.initialCenter.clientX) / rect.width * MAP_CONFIG.viewBox.width;
+        const centerDeltaY = (center.clientY - pinchState.initialCenter.clientY) / rect.height * MAP_CONFIG.viewBox.height;
+
+        // Get initial pinch center in SVG coordinates
+        const initialCenterX = (pinchState.initialCenter.clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
+        const initialCenterY = (pinchState.initialCenter.clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
+
+        // Convert initial center to base coordinates
+        const baseCenterX = initialCenterX / pinchState.initialScale + pinchState.initialX;
+        const baseCenterY = initialCenterY / pinchState.initialScale + pinchState.initialY;
 
         // Update scale
         mapZoom.scale = newScale;
 
-        // Adjust pan to keep pinch center fixed
-        mapZoom.x = baseCenterX - centerX / newScale;
-        mapZoom.y = baseCenterY - centerY / newScale;
+        // Calculate new pan: keep base center at (new screen center)
+        // newScreenX = initialCenterX + centerDeltaX
+        // (baseCenterX - newPanX) * newScale = newScreenX
+        // newPanX = baseCenterX - newScreenX / newScale
+        const newScreenX = initialCenterX + centerDeltaX;
+        const newScreenY = initialCenterY + centerDeltaY;
+        mapZoom.x = baseCenterX - newScreenX / newScale;
+        mapZoom.y = baseCenterY - newScreenY / newScale;
 
         // Clamp pan
-        const visibleWidth = MAP_CONFIG.viewBox.width / newScale;
-        const visibleHeight = MAP_CONFIG.viewBox.height / newScale;
-        mapZoom.x = Math.max(0, Math.min(mapZoom.x, MAP_CONFIG.viewBox.width - visibleWidth));
-        mapZoom.y = Math.max(0, Math.min(mapZoom.y, MAP_CONFIG.viewBox.height - visibleHeight));
+        clampMapPan();
+        updateCirclePositions();
+    } else if (event.touches.length === 1 && panState) {
+        event.preventDefault();
 
+        const touch = event.touches[0];
+        const svg = document.getElementById('station-map');
+        const rect = svg.getBoundingClientRect();
+
+        // Calculate movement in SVG base coordinates
+        const deltaX = (touch.clientX - panState.startX) / rect.width * MAP_CONFIG.viewBox.width / mapZoom.scale;
+        const deltaY = (touch.clientY - panState.startY) / rect.height * MAP_CONFIG.viewBox.height / mapZoom.scale;
+
+        // Check if this counts as a significant movement (for tap detection)
+        if (Math.abs(touch.clientX - panState.startX) > 10 || Math.abs(touch.clientY - panState.startY) > 10) {
+            panState.moved = true;
+        }
+
+        // Update pan (negative because dragging right should move view left)
+        mapZoom.x = panState.initialZoomX - deltaX;
+        mapZoom.y = panState.initialZoomY - deltaY;
+
+        // Clamp pan
+        clampMapPan();
         updateCirclePositions();
     }
 }
 
-/** Handle touch end for pinch zoom */
+/** Clamp map pan to keep content visible */
+function clampMapPan() {
+    const visibleWidth = MAP_CONFIG.viewBox.width / mapZoom.scale;
+    const visibleHeight = MAP_CONFIG.viewBox.height / mapZoom.scale;
+    mapZoom.x = Math.max(0, Math.min(mapZoom.x, MAP_CONFIG.viewBox.width - visibleWidth));
+    mapZoom.y = Math.max(0, Math.min(mapZoom.y, MAP_CONFIG.viewBox.height - visibleHeight));
+}
+
+/** Handle touch end for pinch zoom and pan */
 function onMapTouchEnd(event) {
-    if (event.touches.length < 2) {
-        // Remember if we were pinching (to prevent station selection)
-        const wasPinching = pinchState !== null;
-        pinchState = null;
-        return wasPinching;
+    // Track if a gesture occurred during this touch sequence
+    if (pinchState !== null || (panState !== null && panState.moved)) {
+        gestureOccurred = true;
     }
-    return false;
+
+    if (event.touches.length < 2) {
+        pinchState = null;
+    }
+    if (event.touches.length === 0) {
+        panState = null;
+        // Return and reset gesture flag when all fingers lifted
+        const wasGesture = gestureOccurred;
+        gestureOccurred = false;
+        return wasGesture;
+    }
+
+    return true; // Still have fingers down, suppress tap
 }
 
 /** Handle mouse wheel zoom */
@@ -1098,7 +1174,6 @@ function showMapTooltipAt(event, stationName) {
     tooltip.style.top = `${y}px`;
 }
 
-
 /** Hide tooltip */
 function hideMapTooltip() {
     document.getElementById('map-tooltip').hidden = true;
@@ -1113,6 +1188,65 @@ function clearPrehighlight() {
     prehighlightedStation = null;
 }
 
+/** Clear tapped station state and hide label */
+function clearTappedStation() {
+    document.querySelectorAll('.station-dot.tapped').forEach(el => {
+        el.classList.remove('tapped');
+        el.setAttribute('r', 6);
+    });
+    tappedStation = null;
+    hideStationLabel();
+}
+
+/** Show station label above the station dot */
+function showStationLabel(stationName) {
+    const label = document.getElementById('station-label');
+    const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
+    if (!label || !dot) return;
+
+    const svg = document.getElementById('station-map');
+    const svgRect = svg.getBoundingClientRect();
+    const container = document.querySelector('.map-container');
+    const containerRect = container.getBoundingClientRect();
+
+    const cx = parseFloat(dot.getAttribute('cx'));
+    const cy = parseFloat(dot.getAttribute('cy'));
+
+    // Convert SVG coordinates to container coordinates
+    const x = (cx / MAP_CONFIG.viewBox.width) * svgRect.width + (svgRect.left - containerRect.left);
+    const y = (cy / MAP_CONFIG.viewBox.height) * svgRect.height + (svgRect.top - containerRect.top);
+
+    label.textContent = stationName;
+    label.hidden = false;
+    label.style.left = `${x}px`;
+    label.style.top = `${y - 35}px`;
+}
+
+/** Hide station label */
+function hideStationLabel() {
+    const label = document.getElementById('station-label');
+    if (label) label.hidden = true;
+}
+
+/** Handle tap on a station (two-tap selection) */
+function handleStationTap(stationName) {
+    hideMapTooltip(); // Don't show tooltip alongside station label
+    if (tappedStation === stationName) {
+        // Second tap on same station - select it
+        selectStationFromMap(stationName);
+    } else {
+        // First tap or tap on different station - highlight it
+        clearTappedStation();
+        tappedStation = stationName;
+        const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
+        if (dot) {
+            dot.classList.add('tapped');
+            dot.setAttribute('r', 10);
+        }
+        showStationLabel(stationName);
+    }
+}
+
 /** Open map modal */
 function openMapModal() {
     resetMapZoom();
@@ -1125,32 +1259,54 @@ function closeMapModal() {
     document.getElementById('map-modal').hidden = true;
     hideMapTooltip();
     clearPrehighlight();
+    clearTappedStation();
     resetMapZoom();
 }
 
 // Map modal event listeners
 document.getElementById('map-close').addEventListener('click', closeMapModal);
 
-// SVG map interaction - snap to nearest station
+// SVG map interaction
+// -----------------------------------------------------------------
+// Desktop: hover highlights nearest station + shows tooltip,
+//          single-click selects and closes map
+// Mobile:  tap highlights station + shows label, second tap selects,
+//          pinch to zoom, drag to pan when zoomed in
+// -----------------------------------------------------------------
 const stationMap = document.getElementById('station-map');
 stationMap.addEventListener('mousemove', onMapPointerMove);
 stationMap.addEventListener('touchmove', (e) => {
-    // Handle pinch zoom with two fingers
-    if (e.touches.length === 2) {
+    // Handle pinch zoom or pan
+    if (e.touches.length === 2 || (e.touches.length === 1 && panState)) {
         onMapTouchMove(e);
         return;
     }
-    // Single finger - prehighlight
+    // Single finger when not panning - just prevent default (no tooltip on touch)
     e.preventDefault();
-    onMapPointerMove(e);
 }, { passive: false });
 stationMap.addEventListener('touchstart', onMapTouchStart, { passive: false });
 stationMap.addEventListener('touchend', (e) => {
-    const wasPinching = onMapTouchEnd(e);
-    // Select station on single tap if prehighlighted (but not after pinch)
-    if (e.touches.length === 0 && prehighlightedStation && !wasPinching) {
+    const wasGesture = onMapTouchEnd(e);
+    // Handle tap if not a pinch/pan gesture
+    if (e.touches.length === 0 && !wasGesture) {
         e.preventDefault();
-        selectStationFromMap(prehighlightedStation);
+        // Find station at tap position (changedTouches has the lifted finger)
+        const touch = e.changedTouches[0];
+        if (touch) {
+            const svg = document.getElementById('station-map');
+            const rect = svg.getBoundingClientRect();
+            const x = (touch.clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
+            const y = (touch.clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
+            const { lat, lon } = svgToLatLon(x, y);
+            const tappedNear = findNearestStationWithinSnap(lat, lon);
+
+            if (tappedNear) {
+                handleStationTap(tappedNear);
+            } else {
+                // Tapped on empty area - clear tapped station
+                clearTappedStation();
+            }
+        }
     }
 });
 stationMap.addEventListener('click', onMapClick);
