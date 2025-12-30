@@ -53,10 +53,10 @@ const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 const PROXY_URL = 'https://corsproxy.io/?';
 
 /** Default synthetic location that prefers Grič over Maksimir */
-const DEFAULT_LOCATION = 'Zagreb Grič/Maksimir';
+const DEFAULT_LOCATION = 'Zagreb Grič ili Maksimir';
 
 /** Synthetic location that uses geolocation to find nearest station */
-const DETECTED_LOCATION = 'Nearest';
+const DETECTED_LOCATION = 'Najbliže';
 
 /** Stations used for the default synthetic location */
 const ZAGREB_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
@@ -305,7 +305,7 @@ function setSelectedLocation(location) {
 
 /**
  * Request user's geolocation and cache coordinates.
- * On first visit, auto-selects "Nearest" location.
+ * On first visit, auto-selects "Najbliže" location.
  */
 function requestGeolocation() {
     if (!('geolocation' in navigator)) {
@@ -321,12 +321,12 @@ function requestGeolocation() {
             };
             console.log('[DHMZ] User location:', userCoords.lat.toFixed(4), userCoords.lon.toFixed(4));
 
-            // On first visit, auto-select "Nearest"
+            // On first visit, auto-select "Najbliže"
             if (!hasSelectedLocation()) {
                 setSelectedLocation(DETECTED_LOCATION);
             }
 
-            // Update dropdown and re-render if "Nearest" is selected
+            // Update dropdown and re-render if "Najbliže" is selected
             updateDetectedDropdownOption();
             if (getSelectedLocation() === DETECTED_LOCATION) {
                 updateDropdownSelection(DETECTED_LOCATION);
@@ -373,14 +373,14 @@ function getDropdownLabel(location) {
     if (location === DETECTED_LOCATION) {
         if (userCoords && cachedStations) {
             const nearest = findNearestStation(cachedStations, userCoords.lat, userCoords.lon);
-            if (nearest) return `Nearest (${nearest})`;
+            if (nearest) return `Najbliže (${nearest})`;
         }
-        return 'Nearest';
+        return 'Najbliže';
     }
     return location;
 }
 
-/** Update the "Nearest" dropdown option text after geolocation resolves */
+/** Update the "Najbliže" dropdown option text after geolocation resolves */
 function updateDetectedDropdownOption() {
     const dropdown = document.getElementById('location-dropdown');
     const opt = dropdown.querySelector(`[data-value="${DETECTED_LOCATION}"]`);
@@ -509,7 +509,7 @@ function renderSelectedStation() {
         station = getStationForLocation(cachedStations, selectedLocation);
     }
 
-    // Temporarily show default if "Nearest" selected but no coords yet
+    // Temporarily show default if "Najbliže" selected but no coords yet
     if (!station && selectedLocation === DETECTED_LOCATION) {
         station = getStationForLocation(cachedStations, DEFAULT_LOCATION);
     }
