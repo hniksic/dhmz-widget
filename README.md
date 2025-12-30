@@ -1,6 +1,6 @@
 # DHMZ Weather Widget
 
-A simple PWA that displays current measured weather data from DHMZ (Croatian
+A simple PWA that displays current measured weather daqta from DHMZ (Croatian
 Meteorological Service).
 
 **Live app: https://hniksic.github.io/dhmz-widget/index.html**

@@ -476,7 +476,7 @@ function renderSelectedStation() {
 
     const stationNames = Object.keys(cachedStations);
     if (stationNames.length === 0) {
-        renderError('No station data available');
+        renderError('Nema podataka o postajama');
         return;
     }
 
@@ -542,10 +542,6 @@ function render(station) {
     timeEl.textContent = formattedTime;
     timeEl.classList.toggle('stale', isStale);
     timeEl.hidden = !formattedTime;
-
-    // Hide station and separator elements (no longer used)
-    document.getElementById('station').hidden = true;
-    document.getElementById('time-separator').hidden = true;
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));

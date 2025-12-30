@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zagreb Temperatura</title>
+    <title>DHMZ Vrijeme</title>
 
     <!-- PWA support -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Zagreb">
+    <meta name="apple-mobile-web-app-title" content="Vrijeme">
     <meta name="theme-color" content="#1a1a2e">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -39,7 +39,7 @@
             </div>
 
             <div class="station-info">
-                <div class="measurement-time"><span id="time"></span><span id="time-separator"> · </span><span id="station"></span></div>
+                <div class="measurement-time"><span id="time"></span></div>
             </div>
 
             <div class="weather-condition" id="condition-container">
@@ -64,9 +64,7 @@
 
         <div class="location-picker" id="location-picker">
             <div class="location-trigger" id="location-trigger">▾</div>
-            <div class="location-dropdown" id="location-dropdown" hidden>
-                <div class="location-option" data-value="Zagreb Grič/Maksimir">Zagreb Grič/Maksimir</div>
-            </div>
+            <div class="location-dropdown" id="location-dropdown" hidden></div>
         </div>
     </div>
 
