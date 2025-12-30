@@ -336,6 +336,7 @@ function updateLocationPicker(stationNames) {
     // Add "Najbliže" first
     const nearestOpt = document.createElement('div');
     nearestOpt.className = 'location-option' + (DETECTED_LOCATION === currentValue ? ' selected' : '');
+    nearestOpt.setAttribute('role', 'option');
     nearestOpt.dataset.value = DETECTED_LOCATION;
     nearestOpt.textContent = getDropdownLabel(DETECTED_LOCATION);
     nearestOpt.addEventListener('click', () => onLocationSelect(DETECTED_LOCATION));
@@ -344,6 +345,7 @@ function updateLocationPicker(stationNames) {
     // Add "Show map" option second
     const mapOpt = document.createElement('div');
     mapOpt.className = 'location-option map-option';
+    mapOpt.setAttribute('role', 'option');
     mapOpt.dataset.value = SHOW_MAP_OPTION;
     mapOpt.textContent = 'Izaberi na karti...';
     mapOpt.addEventListener('click', () => {
@@ -356,6 +358,7 @@ function updateLocationPicker(stationNames) {
     stationNames.forEach(name => {
         const opt = document.createElement('div');
         opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
+        opt.setAttribute('role', 'option');
         opt.dataset.value = name;
         opt.textContent = name;
         opt.addEventListener('click', () => onLocationSelect(name));
@@ -787,7 +790,7 @@ function renderMapStations() {
         circle.setAttribute('data-lat', station.lat);
         circle.setAttribute('data-lon', station.lon);
         circle.addEventListener('click', () => selectStationFromMap(name));
-        circle.addEventListener('mouseenter', (e) => showMapTooltip(e, name));
+        circle.addEventListener('mouseenter', (e) => showMapTooltipAt(e, name));
         circle.addEventListener('mouseleave', hideMapTooltip);
         dotsGroup.appendChild(circle);
     }
@@ -982,7 +985,6 @@ function onMapTouchMove(event) {
         const baseCenterY = centerY / mapZoom.scale + mapZoom.y;
 
         // Update scale
-        const oldScale = mapZoom.scale;
         mapZoom.scale = newScale;
 
         // Adjust pan to keep pinch center fixed
@@ -1002,8 +1004,12 @@ function onMapTouchMove(event) {
 /** Handle touch end for pinch zoom */
 function onMapTouchEnd(event) {
     if (event.touches.length < 2) {
+        // Remember if we were pinching (to prevent station selection)
+        const wasPinching = pinchState !== null;
         pinchState = null;
+        return wasPinching;
     }
+    return false;
 }
 
 /** Handle mouse wheel zoom */
@@ -1092,10 +1098,6 @@ function showMapTooltipAt(event, stationName) {
     tooltip.style.top = `${y}px`;
 }
 
-/** Show tooltip near cursor (legacy, for direct dot hover) */
-function showMapTooltip(event, stationName) {
-    showMapTooltipAt(event, stationName);
-}
 
 /** Hide tooltip */
 function hideMapTooltip() {
@@ -1144,9 +1146,9 @@ stationMap.addEventListener('touchmove', (e) => {
 }, { passive: false });
 stationMap.addEventListener('touchstart', onMapTouchStart, { passive: false });
 stationMap.addEventListener('touchend', (e) => {
-    onMapTouchEnd(e);
-    // Select station on single tap if prehighlighted
-    if (e.touches.length === 0 && prehighlightedStation && !pinchState) {
+    const wasPinching = onMapTouchEnd(e);
+    // Select station on single tap if prehighlighted (but not after pinch)
+    if (e.touches.length === 0 && prehighlightedStation && !wasPinching) {
         e.preventDefault();
         selectStationFromMap(prehighlightedStation);
     }
