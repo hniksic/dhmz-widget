@@ -210,18 +210,19 @@ function extractAllStations(xmlDoc, measurementTime) {
  * Gets station data for the selected location.
  * @param {Object<string, StationData>} allStations
  * @param {string} location
- * @returns {StationData|null}
+ * @returns {{station: StationData, distance: number|null}|null}
  */
 function getStationForLocation(allStations, location) {
     if (location === DETECTED_LOCATION) {
         // Use geolocation to find nearest station
         if (userCoords) {
             const nearest = findNearestStation(allStations, userCoords.lat, userCoords.lon);
-            return nearest ? allStations[nearest] : null;
+            return nearest ? { station: allStations[nearest.name], distance: nearest.distance } : null;
         }
         return null;
     }
-    return allStations[location] || null;
+    const station = allStations[location];
+    return station ? { station, distance: null } : null;
 }
 
 /**
@@ -247,7 +248,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
  * @param {Object<string, StationData>} stations
  * @param {number} lat
  * @param {number} lon
- * @returns {string|null} Station name, or null if none found
+ * @returns {{name: string, distance: number}|null} Station name and distance in km, or null if none found
  */
 function findNearestStation(stations, lat, lon) {
     let nearest = null;
@@ -263,7 +264,7 @@ function findNearestStation(stations, lat, lon) {
     }
 
     console.log('[DHMZ] Nearest station:', nearest, `(${minDist.toFixed(1)} km)`);
-    return nearest;
+    return nearest ? { name: nearest, distance: minDist } : null;
 }
 
 /** Check if user has explicitly chosen a location */
@@ -351,7 +352,7 @@ function getDropdownLabel(location) {
     if (location === DETECTED_LOCATION) {
         if (userCoords && cachedStations) {
             const nearest = findNearestStation(cachedStations, userCoords.lat, userCoords.lon);
-            if (nearest) return `Najbliže (${nearest})`;
+            if (nearest) return `Najbliže (${nearest.name})`;
         }
         return 'Najbliže';
     }
@@ -481,26 +482,26 @@ function renderSelectedStation() {
     }
 
     let selectedLocation = getSelectedLocation();
-    let station = getStationForLocation(cachedStations, selectedLocation);
+    let result = getStationForLocation(cachedStations, selectedLocation);
 
     // If DETECTED_LOCATION selected but no coords yet, wait for geolocation
-    if (!station && selectedLocation === DETECTED_LOCATION) {
+    if (!result && selectedLocation === DETECTED_LOCATION) {
         return;
     }
 
     // Fall back to DETECTED_LOCATION if selected station no longer exists
-    if (!station) {
+    if (!result) {
         console.warn('[DHMZ] Station not found, falling back to detected:', selectedLocation);
         selectedLocation = DETECTED_LOCATION;
         setSelectedLocation(selectedLocation);
         updateDropdownSelection(selectedLocation);
         // If still no station (no coords), just return and wait
-        station = getStationForLocation(cachedStations, selectedLocation);
-        if (!station) return;
+        result = getStationForLocation(cachedStations, selectedLocation);
+        if (!result) return;
     }
 
-    console.log('[DHMZ] Displaying:', station.name, station.temperature + '°C');
-    render(station);
+    console.log('[DHMZ] Displaying:', result.station.name, result.station.temperature + '°C');
+    render(result.station, result.distance);
 }
 
 /**
@@ -520,11 +521,15 @@ function show(id) { document.getElementById(id).hidden = false; }
 function hide(id) { document.getElementById(id).hidden = true; }
 function setText(id, text) { document.getElementById(id).textContent = text; }
 
+/** Threshold for showing distance warning (in km) */
+const DISTANCE_WARNING_THRESHOLD = 20;
+
 /**
  * Renders weather data to the widget.
  * @param {StationData} station
+ * @param {number|null} distance - Distance to station in km (only for "nearest" mode)
  */
-function render(station) {
+function render(station, distance) {
     hide('error');
 
     // Reset optional containers
@@ -542,6 +547,15 @@ function render(station) {
     timeEl.textContent = formattedTime;
     timeEl.classList.toggle('stale', isStale);
     timeEl.hidden = !formattedTime;
+
+    // Show distance warning if station is far away
+    const distanceWarning = document.getElementById('distance-warning');
+    if (distance !== null && distance > DISTANCE_WARNING_THRESHOLD) {
+        setText('distance-value', Math.round(distance));
+        distanceWarning.hidden = false;
+    } else {
+        distanceWarning.hidden = true;
+    }
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));

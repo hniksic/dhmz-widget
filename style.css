@@ -69,14 +69,15 @@ body {
 .station-info {
     text-align: center;
     margin-top: 16px;
-}
-
-.measurement-time {
     font-size: 0.875rem;
     color: rgba(255, 255, 255, 0.6);
 }
 
 .stale {
+    color: rgba(255, 200, 100, 0.7);
+}
+
+.info-separator {
     color: rgba(255, 200, 100, 0.7);
 }
 
