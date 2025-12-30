@@ -81,6 +81,115 @@ body {
     color: rgba(255, 200, 100, 0.7);
 }
 
+/* Map modal */
+.map-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+    padding: 20px;
+}
+
+.map-modal[hidden] {
+    display: none;
+}
+
+.map-container {
+    position: relative;
+    background: rgba(20, 20, 40, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 20px;
+    max-width: 500px;
+    width: 100%;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.map-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    z-index: 10;
+}
+
+.map-close:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+#station-map {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+#croatia-outline path {
+    fill: rgba(255, 255, 255, 0.08);
+    stroke: rgba(255, 255, 255, 0.2);
+    stroke-width: 1;
+}
+
+.station-dot {
+    fill: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    transition: fill 0.15s;
+}
+
+.station-dot:hover {
+    fill: #fff;
+}
+
+.station-dot.prehighlight,
+.station-dot.prehighlight:hover {
+    fill: #ffdd57;
+}
+
+.station-dot.selected {
+    fill: #4ecdc4;
+}
+
+.station-dot.selected.prehighlight,
+.station-dot.selected.prehighlight:hover {
+    fill: #ffdd57;
+}
+
+.user-dot {
+    fill: #3b82f6;
+}
+
+.user-dot-pulse {
+    fill: #3b82f6;
+    opacity: 0.4;
+    animation: pulse 2s ease-out infinite;
+}
+
+@keyframes pulse {
+    0% { r: 6; opacity: 0.4; }
+    100% { r: 20; opacity: 0; }
+}
+
+.map-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 20;
+}
+
 .details {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -218,7 +327,7 @@ body {
     color: #fff;
 }
 
-.location-option:nth-child(1) {
+.location-option.map-option {
     margin-bottom: 6px;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);

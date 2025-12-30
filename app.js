@@ -319,6 +319,9 @@ function requestGeolocation() {
     );
 }
 
+/** Special value for "show map" option */
+const SHOW_MAP_OPTION = '__show_map__';
+
 /**
  * Updates the location picker dropdown with available stations.
  * @param {string[]} stationNames
@@ -330,14 +333,31 @@ function updateLocationPicker(stationNames) {
     // Clear and rebuild options
     dropdown.innerHTML = '';
 
-    // Add "Najbliže" (nearest) option first, then all stations
-    const allLocations = [DETECTED_LOCATION, ...stationNames];
+    // Add "Najbliže" first
+    const nearestOpt = document.createElement('div');
+    nearestOpt.className = 'location-option' + (DETECTED_LOCATION === currentValue ? ' selected' : '');
+    nearestOpt.dataset.value = DETECTED_LOCATION;
+    nearestOpt.textContent = getDropdownLabel(DETECTED_LOCATION);
+    nearestOpt.addEventListener('click', () => onLocationSelect(DETECTED_LOCATION));
+    dropdown.appendChild(nearestOpt);
 
-    allLocations.forEach(name => {
+    // Add "Show map" option second
+    const mapOpt = document.createElement('div');
+    mapOpt.className = 'location-option map-option';
+    mapOpt.dataset.value = SHOW_MAP_OPTION;
+    mapOpt.textContent = 'Izaberi na karti...';
+    mapOpt.addEventListener('click', () => {
+        closeLocationDropdown();
+        openMapModal();
+    });
+    dropdown.appendChild(mapOpt);
+
+    // Add all station options
+    stationNames.forEach(name => {
         const opt = document.createElement('div');
         opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
         opt.dataset.value = name;
-        opt.textContent = getDropdownLabel(name);
+        opt.textContent = name;
         opt.addEventListener('click', () => onLocationSelect(name));
         dropdown.appendChild(opt);
     });
@@ -657,3 +677,399 @@ if ('serviceWorker' in navigator) {
 
 // Tap on conditions to refresh (always fetches, no throttle)
 document.getElementById('condition-container').addEventListener('click', fetchWeatherData);
+
+// --- Station Map ---
+
+/** SVG dimensions and Croatia bounding box for coordinate mapping */
+const MAP_CONFIG = {
+    viewBox: { width: 610, height: 476 },
+    // Croatia lat/lon bounding box (with padding)
+    bounds: {
+        minLon: 13.2,
+        maxLon: 19.6,
+        minLat: 42.2,
+        maxLat: 46.7
+    },
+    // Snap distance for station selection (km)
+    snapDistance: 20
+};
+
+/** Currently prehighlighted station name */
+let prehighlightedStation = null;
+
+/** Current map zoom state */
+let mapZoom = {
+    scale: 1,
+    // viewBox origin (top-left corner)
+    x: 0,
+    y: 0
+};
+
+/** Zoom limits */
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 6;
+
+/**
+ * Converts lat/lon to base SVG coordinates (without zoom).
+ * @param {number} lat - Latitude
+ * @param {number} lon - Longitude
+ * @returns {{x: number, y: number}}
+ */
+function latLonToBaseSvg(lat, lon) {
+    const { bounds, viewBox } = MAP_CONFIG;
+    const x = (lon - bounds.minLon) / (bounds.maxLon - bounds.minLon) * viewBox.width;
+    const y = (bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat) * viewBox.height;
+    return { x, y };
+}
+
+/**
+ * Converts lat/lon to SVG coordinates (with zoom applied).
+ * @param {number} lat - Latitude
+ * @param {number} lon - Longitude
+ * @returns {{x: number, y: number}}
+ */
+function latLonToSvg(lat, lon) {
+    const base = latLonToBaseSvg(lat, lon);
+    return {
+        x: (base.x - mapZoom.x) * mapZoom.scale,
+        y: (base.y - mapZoom.y) * mapZoom.scale
+    };
+}
+
+/**
+ * Converts SVG coordinates back to lat/lon (accounting for zoom).
+ * @param {number} x - SVG x coordinate (in zoomed space)
+ * @param {number} y - SVG y coordinate (in zoomed space)
+ * @returns {{lat: number, lon: number}}
+ */
+function svgToLatLon(x, y) {
+    const { bounds, viewBox } = MAP_CONFIG;
+    // Convert from zoomed coordinates to base coordinates
+    const baseX = x / mapZoom.scale + mapZoom.x;
+    const baseY = y / mapZoom.scale + mapZoom.y;
+    const lon = (baseX / viewBox.width) * (bounds.maxLon - bounds.minLon) + bounds.minLon;
+    const lat = bounds.maxLat - (baseY / viewBox.height) * (bounds.maxLat - bounds.minLat);
+    return { lat, lon };
+}
+
+/** Render station dots on the map */
+function renderMapStations() {
+    const dotsGroup = document.getElementById('station-dots');
+    const userGroup = document.getElementById('user-location');
+    if (!dotsGroup || !cachedStations) return;
+
+    // Clear existing dots
+    dotsGroup.innerHTML = '';
+    userGroup.innerHTML = '';
+
+    const selectedLocation = getSelectedLocation();
+    const selectedStation = selectedLocation === DETECTED_LOCATION
+        ? (userCoords ? findNearestStation(cachedStations, userCoords.lat, userCoords.lon)?.name : null)
+        : selectedLocation;
+
+    // Add station dots (fixed radius, positioned in zoomed coordinates)
+    for (const [name, station] of Object.entries(cachedStations)) {
+        if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
+
+        const { x, y } = latLonToSvg(station.lat, station.lon);
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y);
+        circle.setAttribute('r', 6);
+        circle.setAttribute('class', 'station-dot' + (name === selectedStation ? ' selected' : ''));
+        circle.setAttribute('data-station', name);
+        circle.setAttribute('data-lat', station.lat);
+        circle.setAttribute('data-lon', station.lon);
+        circle.addEventListener('click', () => selectStationFromMap(name));
+        circle.addEventListener('mouseenter', (e) => showMapTooltip(e, name));
+        circle.addEventListener('mouseleave', hideMapTooltip);
+        dotsGroup.appendChild(circle);
+    }
+
+    // Add user location marker if available (fixed radius)
+    if (userCoords) {
+        const { x, y } = latLonToSvg(userCoords.lat, userCoords.lon);
+
+        // Pulse animation circle
+        const pulse = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        pulse.setAttribute('cx', x);
+        pulse.setAttribute('cy', y);
+        pulse.setAttribute('r', 6);
+        pulse.setAttribute('class', 'user-dot-pulse');
+        pulse.setAttribute('data-lat', userCoords.lat);
+        pulse.setAttribute('data-lon', userCoords.lon);
+        userGroup.appendChild(pulse);
+
+        // Solid center dot
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('cx', x);
+        dot.setAttribute('cy', y);
+        dot.setAttribute('r', 5);
+        dot.setAttribute('class', 'user-dot');
+        dot.setAttribute('data-lat', userCoords.lat);
+        dot.setAttribute('data-lon', userCoords.lon);
+        userGroup.appendChild(dot);
+    }
+
+    // Update the Croatia outline transform
+    updateOutlineTransform();
+}
+
+/** Update the Croatia outline transform based on zoom */
+function updateOutlineTransform() {
+    const outline = document.getElementById('croatia-outline');
+    if (outline) {
+        outline.setAttribute('transform',
+            `scale(${mapZoom.scale}) translate(${-mapZoom.x}, ${-mapZoom.y})`);
+    }
+}
+
+/** Update circle positions based on current zoom (without recreating them) */
+function updateCirclePositions() {
+    // Update station dots
+    document.querySelectorAll('.station-dot').forEach(dot => {
+        const lat = parseFloat(dot.getAttribute('data-lat'));
+        const lon = parseFloat(dot.getAttribute('data-lon'));
+        const { x, y } = latLonToSvg(lat, lon);
+        dot.setAttribute('cx', x);
+        dot.setAttribute('cy', y);
+    });
+
+    // Update user location dots
+    document.querySelectorAll('.user-dot, .user-dot-pulse').forEach(dot => {
+        const lat = parseFloat(dot.getAttribute('data-lat'));
+        const lon = parseFloat(dot.getAttribute('data-lon'));
+        if (isFinite(lat) && isFinite(lon)) {
+            const { x, y } = latLonToSvg(lat, lon);
+            dot.setAttribute('cx', x);
+            dot.setAttribute('cy', y);
+        }
+    });
+
+    // Update outline transform
+    updateOutlineTransform();
+}
+
+/** Handle station selection from map */
+function selectStationFromMap(stationName) {
+    onLocationSelect(stationName);
+    closeMapModal();
+}
+
+/**
+ * Find the nearest station to given lat/lon within snap distance.
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {string|null} Station name or null if none within range
+ */
+function findNearestStationWithinSnap(lat, lon) {
+    if (!cachedStations) return null;
+
+    let nearest = null;
+    let minDist = MAP_CONFIG.snapDistance;
+
+    for (const [name, station] of Object.entries(cachedStations)) {
+        if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
+        const dist = haversineDistance(lat, lon, station.lat, station.lon);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = name;
+        }
+    }
+    return nearest;
+}
+
+/** Update prehighlight based on pointer position */
+function updatePrehighlight(svgX, svgY) {
+    const { lat, lon } = svgToLatLon(svgX, svgY);
+    const nearest = findNearestStationWithinSnap(lat, lon);
+
+    if (nearest !== prehighlightedStation) {
+        // Remove old prehighlight
+        document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
+            el.classList.remove('prehighlight');
+            el.setAttribute('r', 6);
+        });
+
+        // Add new prehighlight (larger radius)
+        if (nearest) {
+            const dot = document.querySelector(`.station-dot[data-station="${nearest}"]`);
+            if (dot) {
+                dot.classList.add('prehighlight');
+                dot.setAttribute('r', 10);
+            }
+        }
+
+        prehighlightedStation = nearest;
+    }
+
+    return nearest;
+}
+
+/** Convert mouse/touch event to SVG coordinates */
+function eventToSvgCoords(event) {
+    const svg = document.getElementById('station-map');
+    const rect = svg.getBoundingClientRect();
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+    // ViewBox is fixed, so just map screen coords to SVG coords
+    const x = (clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
+    const y = (clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
+    return { x, y };
+}
+
+/** Reset map zoom to default */
+function resetMapZoom() {
+    mapZoom = { scale: 1, x: 0, y: 0 };
+}
+
+/** Handle mouse wheel zoom */
+function onMapWheel(event) {
+    event.preventDefault();
+
+    const zoomFactor = 1.05;
+    const oldScale = mapZoom.scale;
+    let newScale;
+
+    if (event.deltaY < 0) {
+        // Zoom in
+        newScale = Math.min(oldScale * zoomFactor, MAX_ZOOM);
+    } else {
+        // Zoom out
+        newScale = Math.max(oldScale / zoomFactor, MIN_ZOOM);
+    }
+
+    if (newScale === oldScale) return;
+
+    // Get mouse position in SVG coordinates (screen space)
+    const { x: mouseX, y: mouseY } = eventToSvgCoords(event);
+
+    // Convert mouse position to base (unzoomed) coordinates
+    const baseMouseX = mouseX / oldScale + mapZoom.x;
+    const baseMouseY = mouseY / oldScale + mapZoom.y;
+
+    // Update scale
+    mapZoom.scale = newScale;
+
+    // Adjust pan to keep the mouse position fixed on screen
+    // New screen position should equal old screen position:
+    // (baseMouseX - newPanX) * newScale = mouseX
+    // newPanX = baseMouseX - mouseX / newScale
+    mapZoom.x = baseMouseX - mouseX / newScale;
+    mapZoom.y = baseMouseY - mouseY / newScale;
+
+    // Calculate visible area in base coordinates
+    const visibleWidth = MAP_CONFIG.viewBox.width / newScale;
+    const visibleHeight = MAP_CONFIG.viewBox.height / newScale;
+
+    // Clamp pan to keep content visible
+    mapZoom.x = Math.max(0, Math.min(mapZoom.x, MAP_CONFIG.viewBox.width - visibleWidth));
+    mapZoom.y = Math.max(0, Math.min(mapZoom.y, MAP_CONFIG.viewBox.height - visibleHeight));
+
+    // Redraw at new positions
+    updateCirclePositions();
+}
+
+/** Handle pointer move on map */
+function onMapPointerMove(event) {
+    const { x, y } = eventToSvgCoords(event);
+    const nearest = updatePrehighlight(x, y);
+
+    // Update tooltip
+    if (nearest) {
+        showMapTooltipAt(event, nearest);
+    } else {
+        hideMapTooltip();
+    }
+}
+
+/** Handle click/tap on map */
+function onMapClick(event) {
+    // If we have a prehighlighted station, select it
+    if (prehighlightedStation) {
+        selectStationFromMap(prehighlightedStation);
+    }
+}
+
+/** Show tooltip near cursor/touch */
+function showMapTooltipAt(event, stationName) {
+    const tooltip = document.getElementById('map-tooltip');
+    const container = document.querySelector('.map-container');
+    const rect = container.getBoundingClientRect();
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+    tooltip.textContent = stationName;
+    tooltip.hidden = false;
+
+    // Position tooltip near the cursor
+    const x = clientX - rect.left + 10;
+    const y = clientY - rect.top - 30;
+    tooltip.style.left = `${x}px`;
+    tooltip.style.top = `${y}px`;
+}
+
+/** Show tooltip near cursor (legacy, for direct dot hover) */
+function showMapTooltip(event, stationName) {
+    showMapTooltipAt(event, stationName);
+}
+
+/** Hide tooltip */
+function hideMapTooltip() {
+    document.getElementById('map-tooltip').hidden = true;
+}
+
+/** Clear prehighlight state */
+function clearPrehighlight() {
+    document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
+        el.classList.remove('prehighlight');
+    });
+    prehighlightedStation = null;
+}
+
+/** Open map modal */
+function openMapModal() {
+    resetMapZoom();
+    renderMapStations();
+    document.getElementById('map-modal').hidden = false;
+}
+
+/** Close map modal */
+function closeMapModal() {
+    document.getElementById('map-modal').hidden = true;
+    hideMapTooltip();
+    clearPrehighlight();
+    resetMapZoom();
+}
+
+// Map modal event listeners
+document.getElementById('map-close').addEventListener('click', closeMapModal);
+
+// SVG map interaction - snap to nearest station
+const stationMap = document.getElementById('station-map');
+stationMap.addEventListener('mousemove', onMapPointerMove);
+stationMap.addEventListener('touchmove', (e) => {
+    e.preventDefault(); // Prevent scrolling
+    onMapPointerMove(e);
+}, { passive: false });
+stationMap.addEventListener('click', onMapClick);
+stationMap.addEventListener('touchend', (e) => {
+    if (prehighlightedStation) {
+        e.preventDefault();
+        selectStationFromMap(prehighlightedStation);
+    }
+});
+stationMap.addEventListener('mouseleave', () => {
+    clearPrehighlight();
+    hideMapTooltip();
+});
+stationMap.addEventListener('wheel', onMapWheel, { passive: false });
+document.getElementById('map-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'map-modal') closeMapModal();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('map-modal').hidden) {
+        closeMapModal();
+    }
+});
