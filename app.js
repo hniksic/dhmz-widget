@@ -1,8 +1,9 @@
 /**
- * DHMZ Zagreb Temperature Widget
+ * DHMZ Weather Widget
  *
  * Fetches current weather data from DHMZ (Croatian Meteorological Service)
- * and displays temperature for Zagreb.
+ * and displays temperature for any station in Croatia.
+ * Supports geolocation to auto-select the nearest station.
  */
 
 /*
@@ -37,32 +38,16 @@
  *   </Grad>
  *   <!-- More <Grad> elements... -->
  * </Hrvatska>
- *
- * Zagreb stations we look for (in priority order):
- * - "Zagreb-Grič" (preferred, historic city center station)
- * - "Zagreb-Maksimir" (fallback, in a large park)
- *
- * Note: "Zagreb-aerodrom" also exists but is intentionally ignored
- * as we want city center measurements.
  */
 
-/** DHMZ XML endpoint for current weather data (by region, includes both Grič and Maksimir) */
+/** DHMZ XML endpoint for current weather data (by region) */
 const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 
 /** CORS proxy (vrijeme.hr doesn't send CORS headers) */
 const PROXY_URL = 'https://corsproxy.io/?';
 
-/** Default synthetic location that prefers Grič over Maksimir */
-const DEFAULT_LOCATION = 'Zagreb Grič ili Maksimir';
-
-/** Synthetic location that uses geolocation to find nearest station */
+/** Special location that uses geolocation to find nearest station */
 const DETECTED_LOCATION = 'Najbliže';
-
-/** Stations used for the default synthetic location */
-const ZAGREB_STATIONS = ['Zagreb-Grič', 'Zagreb-Maksimir'];
-
-/** Prefix to strip when showing station name for default location */
-const ZAGREB_PREFIX = 'Zagreb-';
 
 /** LocalStorage key for selected location */
 const LOCATION_KEY = 'dhmz-location';
@@ -228,13 +213,6 @@ function extractAllStations(xmlDoc, measurementTime) {
  * @returns {StationData|null}
  */
 function getStationForLocation(allStations, location) {
-    if (location === DEFAULT_LOCATION) {
-        // Synthetic location: prefer Grič, fall back to Maksimir
-        for (const name of ZAGREB_STATIONS) {
-            if (allStations[name]) return allStations[name];
-        }
-        return null;
-    }
     if (location === DETECTED_LOCATION) {
         // Use geolocation to find nearest station
         if (userCoords) {
@@ -295,7 +273,7 @@ function hasSelectedLocation() {
 
 /** Get selected location from localStorage */
 function getSelectedLocation() {
-    return localStorage.getItem(LOCATION_KEY) || DEFAULT_LOCATION;
+    return localStorage.getItem(LOCATION_KEY) || DETECTED_LOCATION;
 }
 
 /** Save selected location to localStorage */
@@ -351,8 +329,8 @@ function updateLocationPicker(stationNames) {
     // Clear and rebuild options
     dropdown.innerHTML = '';
 
-    // Add synthetic locations first, then all stations
-    const allLocations = [DETECTED_LOCATION, DEFAULT_LOCATION, ...stationNames];
+    // Add "Najbliže" (nearest) option first, then all stations
+    const allLocations = [DETECTED_LOCATION, ...stationNames];
 
     allLocations.forEach(name => {
         const opt = document.createElement('div');
@@ -496,27 +474,29 @@ document.addEventListener('click', (e) => {
 function renderSelectedStation() {
     if (!cachedStations) return;
 
+    const stationNames = Object.keys(cachedStations);
+    if (stationNames.length === 0) {
+        renderError('No station data available');
+        return;
+    }
+
     let selectedLocation = getSelectedLocation();
     let station = getStationForLocation(cachedStations, selectedLocation);
 
-    // Fall back to default if selected station no longer exists
-    // (but don't overwrite DETECTED_LOCATION - coords may arrive later)
-    if (!station && selectedLocation !== DEFAULT_LOCATION && selectedLocation !== DETECTED_LOCATION) {
-        console.warn('[DHMZ] Station not found, falling back to default:', selectedLocation);
-        selectedLocation = DEFAULT_LOCATION;
+    // If DETECTED_LOCATION selected but no coords yet, wait for geolocation
+    if (!station && selectedLocation === DETECTED_LOCATION) {
+        return;
+    }
+
+    // Fall back to DETECTED_LOCATION if selected station no longer exists
+    if (!station) {
+        console.warn('[DHMZ] Station not found, falling back to detected:', selectedLocation);
+        selectedLocation = DETECTED_LOCATION;
         setSelectedLocation(selectedLocation);
         updateDropdownSelection(selectedLocation);
+        // If still no station (no coords), just return and wait
         station = getStationForLocation(cachedStations, selectedLocation);
-    }
-
-    // Temporarily show default if "Najbliže" selected but no coords yet
-    if (!station && selectedLocation === DETECTED_LOCATION) {
-        station = getStationForLocation(cachedStations, DEFAULT_LOCATION);
-    }
-
-    if (!station) {
-        renderError('No station data available');
-        return;
+        if (!station) return;
     }
 
     console.log('[DHMZ] Displaying:', station.name, station.temperature + '°C');
@@ -552,44 +532,20 @@ function render(station) {
     document.getElementById('pressure-container').classList.add('empty');
     document.getElementById('wind-container').classList.add('empty');
 
-    const selectedLocation = getSelectedLocation();
-
-    // Update title based on selected location
-    let title;
-    if (selectedLocation === DEFAULT_LOCATION) {
-        title = 'Zagreb';
-    } else if (selectedLocation === DETECTED_LOCATION) {
-        title = station.name;
-    } else {
-        title = selectedLocation;
-    }
-    setText('title', title);
-
+    setText('title', station.name);
     setText('temperature', station.temperature.toFixed(1));
-
-    // For default location, show actual station used (without Zagreb- prefix)
-    const displayName = selectedLocation === DEFAULT_LOCATION
-        ? station.name.replace(ZAGREB_PREFIX, '')
-        : '';
-    setText('station', displayName);
 
     // Format and display measurement time, with stale color if needed
     const { formattedTime, isStale } = formatMeasurementTime(station.measurementTime);
     const timeEl = document.getElementById('time');
-    const separatorEl = document.getElementById('time-separator');
-    const stationEl = document.getElementById('station');
 
-    // Show time if available
     timeEl.textContent = formattedTime;
     timeEl.classList.toggle('stale', isStale);
     timeEl.hidden = !formattedTime;
 
-    // Show separator only if both time and station are shown
-    const showSeparator = formattedTime && displayName;
-    separatorEl.hidden = !showSeparator;
-
-    // Hide station element if empty
-    stationEl.hidden = !displayName;
+    // Hide station and separator elements (no longer used)
+    document.getElementById('station').hidden = true;
+    document.getElementById('time-separator').hidden = true;
 
     if (station.condition) {
         setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));

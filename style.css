@@ -224,7 +224,7 @@ body {
     color: #fff;
 }
 
-.location-option:nth-child(2) {
+.location-option:nth-child(1) {
     margin-bottom: 6px;
     padding-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
