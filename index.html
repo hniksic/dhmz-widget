@@ -53,6 +53,7 @@
                 </div>
                 <div class="detail-item empty" id="pressure-container">
                     <div class="detail-label">Tlak <span id="pressure-trend" class="trend"></span></div>
+                    <!-- Unit intentionally omitted - value is obviously hPa -->
                     <div class="detail-value"><span id="pressure"></span></div>
                 </div>
                 <div class="detail-item empty" id="wind-container">
@@ -63,15 +64,15 @@
         </div>
 
         <div class="location-picker" id="location-picker">
-            <div class="location-trigger" id="location-trigger">▾</div>
-            <div class="location-dropdown" id="location-dropdown" hidden></div>
+            <button class="location-trigger" id="location-trigger" aria-label="Odaberi lokaciju" aria-haspopup="listbox">▾</button>
+            <div class="location-dropdown" id="location-dropdown" role="listbox" hidden></div>
         </div>
 
     </div>
 
     <div class="map-modal" id="map-modal" hidden>
         <div class="map-container">
-            <button class="map-close" id="map-close">✕</button>
+            <button class="map-close" id="map-close" aria-label="Zatvori kartu">✕</button>
             <svg id="station-map" viewBox="0 0 610 476" preserveAspectRatio="xMidYMid meet">
                 <!-- Croatia outline (mainland + major islands) -->
                 <g id="croatia-outline">

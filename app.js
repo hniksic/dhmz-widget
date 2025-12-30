@@ -467,7 +467,13 @@ document.addEventListener('click', (e) => {
             case 'Enter':
                 e.preventDefault();
                 if (currentIndex >= 0) {
-                    onLocationSelect(options[currentIndex].dataset.value);
+                    const value = options[currentIndex].dataset.value;
+                    if (value === SHOW_MAP_OPTION) {
+                        closeLocationDropdown();
+                        openMapModal();
+                    } else {
+                        onLocationSelect(value);
+                    }
                 }
                 break;
 
@@ -700,7 +706,7 @@ let prehighlightedStation = null;
 /** Current map zoom state */
 let mapZoom = {
     scale: 1,
-    // viewBox origin (top-left corner)
+    // Pan offset in base (unzoomed) coordinates
     x: 0,
     y: 0
 };
@@ -1024,6 +1030,7 @@ function hideMapTooltip() {
 function clearPrehighlight() {
     document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
         el.classList.remove('prehighlight');
+        el.setAttribute('r', 6);
     });
     prehighlightedStation = null;
 }
