@@ -689,9 +689,15 @@ document.getElementById('condition-container').addEventListener('click', fetchWe
 
 // --- Station Map ---
 
+/** Latitude correction factor - tuned to match Google Maps appearance */
+const LAT_CORRECTION = 0.85;
+
+/** Original SVG width before latitude correction */
+const ORIGINAL_SVG_WIDTH = 610;
+
 /** SVG dimensions and Croatia bounding box for coordinate mapping */
 const MAP_CONFIG = {
-    viewBox: { width: 610, height: 476 },
+    viewBox: { width: ORIGINAL_SVG_WIDTH * LAT_CORRECTION, height: 476 },
     // Croatia lat/lon bounding box (with padding)
     bounds: {
         minLon: 13.2,
@@ -828,8 +834,11 @@ function renderMapStations() {
 function updateOutlineTransform() {
     const outline = document.getElementById('croatia-outline');
     if (outline) {
+        // The outline path was generated in the original 610×476 coordinate system.
+        // We apply: 1) lat correction to squish horizontally, 2) pan, 3) zoom
+        // Transforms apply right-to-left.
         outline.setAttribute('transform',
-            `scale(${mapZoom.scale}) translate(${-mapZoom.x}, ${-mapZoom.y})`);
+            `scale(${mapZoom.scale}) translate(${-mapZoom.x}, ${-mapZoom.y}) scale(${LAT_CORRECTION}, 1)`);
     }
 }
 
