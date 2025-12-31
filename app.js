@@ -172,13 +172,13 @@ const OLD_THRESHOLD_MS = 23 * 60 * 60 * 1000;
  * @property {number} lat - Latitude
  * @property {number} lon - Longitude
  * @property {number} temperature - Temperature in °C
- * @property {string|null} humidity - Relative humidity %
- * @property {string|null} pressure - Atmospheric pressure in hPa
- * @property {string|null} pressureTrend - Pressure tendency (+/- value)
+ * @property {number|null} humidity - Relative humidity %
+ * @property {number|null} pressure - Atmospheric pressure in hPa
+ * @property {number|null} pressureTrend - Pressure tendency (+/- value)
  * @property {string|null} windDirection - Wind direction
- * @property {string|null} windSpeed - Wind speed in m/s
+ * @property {number|null} windSpeed - Wind speed in m/s
  * @property {string|null} condition - Weather condition description
- * @property {string} measurementTime - When the measurement was taken
+ * @property {Date|null} measurementTime - When the measurement was taken
  */
 
 /**
@@ -245,25 +245,30 @@ async function fetchWeatherData() {
 /**
  * Extracts measurement timestamp from XML.
  * @param {Document} xmlDoc
- * @returns {string} Formatted timestamp like "27.12.2025 14:00"
+ * @returns {Date|null} Parsed measurement time, or null if unavailable
  */
 function extractMeasurementTime(xmlDoc) {
     const datumTermin = xmlDoc.querySelector('DatumTermin');
-    if (!datumTermin) return '';
+    if (!datumTermin) return null;
 
     const datum = datumTermin.querySelector('Datum');
     const termin = datumTermin.querySelector('Termin');
 
     if (datum && termin) {
-        return `${datum.textContent.trim()} ${termin.textContent.trim()}:00`;
+        // Datum format: "DD.MM.YYYY", Termin format: "HH"
+        const match = datum.textContent.trim().match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (!match) return null;
+        const [, day, month, year] = match;
+        const hour = parseInt(termin.textContent.trim(), 10);
+        return new Date(year, month - 1, day, hour);
     }
-    return '';
+    return null;
 }
 
 /**
  * Extracts all stations from XML.
  * @param {Document} xmlDoc
- * @param {string} measurementTime
+ * @param {Date|null} measurementTime
  * @returns {Object<string, StationData>}
  */
 function extractAllStations(xmlDoc, measurementTime) {
@@ -292,11 +297,11 @@ function extractAllStations(xmlDoc, measurementTime) {
             lat,
             lon,
             temperature: parseFloat(tempValue),
-            humidity: getTextOrNull(data, 'Vlaga'),
-            pressure: getTextOrNull(data, 'Tlak'),
-            pressureTrend: getTextOrNull(data, 'TlakTend'),
+            humidity: getNumberOrNull(data, 'Vlaga'),
+            pressure: getNumberOrNull(data, 'Tlak'),
+            pressureTrend: getNumberOrNull(data, 'TlakTend'),
             windDirection: getTextOrNull(data, 'VjetarSmjer'),
-            windSpeed: getTextOrNull(data, 'VjetarBrzina'),
+            windSpeed: getNumberOrNull(data, 'VjetarBrzina'),
             condition: getTextOrNull(data, 'Vrijeme'),
             measurementTime
         };
@@ -674,6 +679,14 @@ function getTextOrNull(parent, selector) {
     return (text && text !== '-') ? text : null;
 }
 
+/** Helper to get numeric content from an XML element, or null if missing/invalid */
+function getNumberOrNull(parent, selector) {
+    const text = getTextOrNull(parent, selector);
+    if (text === null) return null;
+    const num = parseFloat(text);
+    return isNaN(num) ? null : num;
+}
+
 /** Helper to show/hide an element */
 function show(id) { document.getElementById(id).hidden = false; }
 function hide(id) { document.getElementById(id).hidden = true; }
@@ -755,20 +768,20 @@ function render(station, distance) {
     }
     show('condition-container');
 
-    if (station.humidity) {
+    if (station.humidity !== null) {
         setText('humidity', station.humidity);
         document.getElementById('humidity-container').classList.remove('empty');
     }
 
-    if (station.pressure) {
-        setText('pressure', Math.round(parseFloat(station.pressure)));
+    if (station.pressure !== null) {
+        setText('pressure', Math.round(station.pressure));
         const trend = station.pressureTrend;
-        const arrow = trend?.startsWith('+') ? '▲' : trend?.startsWith('-') ? '▼' : '';
+        const arrow = trend > 0 ? '▲' : trend < 0 ? '▼' : '';
         setText('pressure-trend', arrow);
         document.getElementById('pressure-container').classList.remove('empty');
     }
 
-    if (station.windSpeed && parseFloat(station.windSpeed) > 0) {
+    if (station.windSpeed !== null && station.windSpeed > 0) {
         const dir = (station.windDirection && station.windDirection !== 'C') ? ` ${station.windDirection}` : '';
         setText('wind', `${station.windSpeed} m/s${dir}`);
         document.getElementById('wind-container').classList.remove('empty');
@@ -803,8 +816,7 @@ function renderStatus(message, showCancel = true) {
 
 /**
  * Formats measurement time for display and checks if data is stale.
- * Parses the time once and returns both formatted string and stale status.
- * @param {string} measurementTime - Format "DD.MM.YYYY HH:00"
+ * @param {Date|null} measurementTime
  * @returns {{formattedTime: string, isStale: boolean}}
  */
 function formatMeasurementTime(measurementTime) {
@@ -812,19 +824,12 @@ function formatMeasurementTime(measurementTime) {
         return { formattedTime: '', isStale: false };
     }
 
-    const match = measurementTime.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):00/);
-    if (!match) {
-        return { formattedTime: measurementTime, isStale: false };
-    }
-
-    const [, day, month, year, hour] = match;
-    const measurementDate = new Date(year, month - 1, day, hour);
-    const ageMs = Date.now() - measurementDate;
+    const ageMs = Date.now() - measurementTime;
 
     // Show "staro" if very old, otherwise show as "19h"
     const formattedTime = ageMs > OLD_THRESHOLD_MS
         ? 'staro'
-        : `${measurementDate.getHours()}h`;
+        : `${measurementTime.getHours()}h`;
 
     return {
         formattedTime,
