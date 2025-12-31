@@ -23,8 +23,8 @@
  *   </DatumTermin>
  *   <Grad autom="0|1">             <!-- autom: 0=manual, 1=automatic station -->
  *     <GradIme>Station Name</GradIme>
- *     <Lat>45.xxx</Lat>
- *     <Lon>16.xxx</Lon>
+ *     <Lat>XX.XXX</Lat>              <!-- Latitude (42-47°N), may have leading spaces -->
+ *     <Lon>XX.XXX</Lon>              <!-- Longitude (13-19°E), may have leading spaces -->
  *     <Podatci>
  *       <Temp>XX.X</Temp>          <!-- Temperature in °C, may have leading spaces -->
  *       <Vlaga>XX</Vlaga>          <!-- Relative humidity %, or "-" if unavailable -->
@@ -47,7 +47,7 @@ const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 const PROXY_URL = 'https://corsproxy.io/?';
 
 /** Special location that uses geolocation to find nearest station */
-const DETECTED_LOCATION = 'Najbliže';
+const DETECTED_LOCATION = 'Najbliža';
 
 /**
  * City prefixes for stations that should display as "City" in title
@@ -76,12 +76,12 @@ let userCoords = null;
 /**
  * Geolocation status: 'unknown' | 'granted' | 'denied' | 'unavailable'
  *
- * Flow when user selects "Najbliže" (nearest station):
+ * Flow when user selects "Najbliža" (nearest station):
  * 1. If userCoords available → show weather for nearest station
  * 2. If userCoords not available:
  *    - geoStatus 'unknown' → show "Tražim lokaciju..." with cancel button
  *      - Cancel shows "Izaberite stanicu" and opens dropdown for manual selection
- *      - Re-selecting "Najbliže" retries geolocation (resets geoStatus to 'unknown')
+ *      - Re-selecting "Najbliža" retries geolocation (resets geoStatus to 'unknown')
  *    - geoStatus 'denied' → show error with instructions to enable in device settings
  *    - geoStatus 'unavailable' → show error suggesting manual selection
  * 3. When geolocation resolves:
@@ -317,7 +317,7 @@ function setSelectedLocation(location) {
 
 /**
  * Request user's geolocation and cache coordinates.
- * On first visit, auto-selects "Najbliže" location.
+ * On first visit, auto-selects "Najbliža" location.
  */
 function requestGeolocation() {
     if (!('geolocation' in navigator)) {
@@ -336,12 +336,12 @@ function requestGeolocation() {
             };
             console.log('[DHMZ] User location:', userCoords.lat.toFixed(4), userCoords.lon.toFixed(4));
 
-            // On first visit, auto-select "Najbliže"
+            // On first visit, auto-select "Najbliža"
             if (!hasSelectedLocation()) {
                 setSelectedLocation(DETECTED_LOCATION);
             }
 
-            // Update dropdown and re-render if "Najbliže" is selected
+            // Update dropdown and re-render if "Najbliža" is selected
             updateDetectedDropdownOption();
             if (getSelectedLocation() === DETECTED_LOCATION) {
                 updateDropdownSelection(DETECTED_LOCATION);
@@ -354,7 +354,7 @@ function requestGeolocation() {
             geoStatus = error.code === 1 ? 'denied' : 'unavailable';
             updateDetectedDropdownOption();
 
-            // If "Najbliže" is currently selected and we can't get location, render a message
+            // If "Najbliža" is currently selected and we can't get location, render a message
             if (getSelectedLocation() === DETECTED_LOCATION) {
                 renderSelectedStation();
             }
@@ -377,7 +377,7 @@ function updateLocationPicker(stationNames) {
     // Clear and rebuild options
     dropdown.innerHTML = '';
 
-    // Add "Najbliže" first
+    // Add "Najbliža" first
     const nearestOpt = document.createElement('div');
     nearestOpt.className = 'location-option' + (DETECTED_LOCATION === currentValue ? ' selected' : '');
     nearestOpt.setAttribute('role', 'option');
@@ -419,16 +419,16 @@ function getDropdownLabel(location) {
     if (location === DETECTED_LOCATION) {
         if (userCoords && cachedStations) {
             const nearest = findNearestStation(cachedStations, userCoords.lat, userCoords.lon);
-            if (nearest) return `Najbliže (${nearest.name})`;
+            if (nearest) return `${DETECTED_LOCATION} (${nearest.name})`;
         }
-        if (geoStatus === 'denied') return 'Najbliže (lokacija onemogućena)';
-        if (geoStatus === 'unavailable') return 'Najbliže (lokacija nedostupna)';
-        return 'Najbliže';
+        if (geoStatus === 'denied') return `${DETECTED_LOCATION} (lokacija onemogućena)`;
+        if (geoStatus === 'unavailable') return `${DETECTED_LOCATION} (lokacija nedostupna)`;
+        return DETECTED_LOCATION;
     }
     return location;
 }
 
-/** Update the "Najbliže" dropdown option text after geolocation resolves */
+/** Update the "Najbliža" dropdown option text after geolocation resolves */
 function updateDetectedDropdownOption() {
     const dropdown = document.getElementById('location-dropdown');
     const opt = dropdown.querySelector(`[data-value="${DETECTED_LOCATION}"]`);
@@ -443,7 +443,7 @@ function onLocationSelect(value) {
     closeLocationDropdown();
     updateDropdownSelection(value);
 
-    // If selecting "Najbliže" without coords, retry geolocation
+    // If selecting "Najbliža" without coords, retry geolocation
     // (user may have just enabled permissions in settings)
     if (value === DETECTED_LOCATION && !userCoords) {
         geoStatus = 'unknown'; // Reset so we don't flash the error
@@ -731,13 +731,13 @@ function renderError(message) {
 }
 
 /**
- * Renders a status/loading message to the widget.
+ * Renders a status/loading message as an overlay on the widget.
  * @param {string} message
  * @param {boolean} [showCancel=true] - Whether to show the cancel button
  */
 function renderStatus(message, showCancel = true) {
-    hide('weather');
     hide('error');
+    // Don't hide weather - status overlays it
     setText('status-message', message);
     document.getElementById('status-cancel').hidden = !showCancel;
     show('status');

@@ -28,28 +28,28 @@
 
         <!-- Loading/status state (hidden by default) -->
         <div class="status" id="status" hidden>
-            <p id="status-message"></p>
+            <p id="status-message">Učitavam...</p>
             <button class="cancel-btn" id="status-cancel">Odustani</button>
         </div>
 
-        <!-- Weather display (hidden until data loads) -->
-        <div id="weather" hidden>
+        <!-- Weather display (visible by default to prevent layout flash) -->
+        <div id="weather">
             <div class="header">
                 <h1 id="title">Zagreb</h1>
             </div>
 
             <div class="temperature-display">
                 <div class="temperature-value">
-                    <span id="temperature"></span><span class="unit">°C</span>
+                    <span id="temperature">—</span><span class="unit">°C</span>
                 </div>
             </div>
 
             <div class="station-info">
-                <span id="time"></span><span class="info-separator" id="station-subtitle" hidden> · <span id="subtitle-value"></span></span><span class="info-separator" id="distance-warning" hidden> · <span id="distance-value"></span> km</span>
+                <span id="time">&nbsp;</span><span class="info-separator" id="station-subtitle" hidden> · <span id="subtitle-value"></span></span><span class="info-separator" id="distance-warning" hidden> · <span id="distance-value"></span> km</span>
             </div>
 
             <div class="weather-condition" id="condition-container">
-                <span id="condition"></span>
+                <span id="condition">&nbsp;</span>
             </div>
 
             <div class="details" id="details">
