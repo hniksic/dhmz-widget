@@ -171,6 +171,9 @@ const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 /** Data older than this shows "staro" instead of the hour (23 hours) */
 const OLD_THRESHOLD_MS = 23 * 60 * 60 * 1000;
 
+/** Type-ahead search buffer timeout (ms) */
+const TYPEAHEAD_TIMEOUT_MS = 2000;
+
 /**
  * @typedef {Object} StationData
  * @property {string} name - Station name
@@ -598,7 +601,7 @@ const LocationPicker = {
                     e.preventDefault();
                     this.searchBuffer += e.key.toLowerCase();
                     clearTimeout(this.searchTimeout);
-                    this.searchTimeout = setTimeout(() => { this.searchBuffer = ''; }, 500);
+                    this.searchTimeout = setTimeout(() => { this.searchBuffer = ''; }, TYPEAHEAD_TIMEOUT_MS);
 
                     const match = options.findIndex(opt =>
                         opt.textContent.toLowerCase().startsWith(this.searchBuffer)
