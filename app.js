@@ -77,8 +77,9 @@ let cachedStations = null;
  * 1. If coords available → show weather for nearest station
  * 2. If coords not available:
  *    - status 'unknown' → show "Tražim lokaciju..." with cancel button
- *      - Cancel shows "Izaberite stanicu" and opens dropdown for manual selection
- *      - Re-selecting "Najbliža" retries geolocation (resets status to 'unknown')
+ *      - Cancel hides the status overlay and opens dropdown for manual selection
+ *        (sets cancelledByUser flag to prevent geolocation timeout from showing error)
+ *      - Re-selecting "Najbliža" retries geolocation (resets status and cancelledByUser)
  *    - status 'denied' → show error with instructions to enable in device settings
  *    - status 'unavailable' → show error suggesting manual selection
  * 3. When geolocation resolves:
@@ -91,6 +92,8 @@ const Geolocation = {
     status: 'unknown',
     /** Cached coordinates from last successful geolocation */
     coords: null,
+    /** Set to true when user cancels geolocation prompt to prevent UI updates */
+    cancelledByUser: false,
 
     /** Check if coordinates are available */
     hasCoords() {
@@ -137,8 +140,9 @@ const Geolocation = {
                 self.status = error.code === 1 ? 'denied' : 'unavailable';
                 LocationPicker.updateDetectedLabel();
 
-                // If "Najbliža" is currently selected and we can't get location, render a message
-                if (getSelectedLocation() === DETECTED_LOCATION) {
+                // If "Najbliža" is currently selected and we can't get location, render error
+                // (unless user cancelled and is manually selecting a station)
+                if (getSelectedLocation() === DETECTED_LOCATION && !self.cancelledByUser) {
                     renderSelectedStation();
                 }
             },
@@ -152,6 +156,7 @@ const Geolocation = {
      */
     retry() {
         this.status = 'unknown';
+        this.cancelledByUser = false;
         LocationPicker.updateDetectedLabel();
         this.request();
     }
@@ -618,8 +623,9 @@ const LocationPicker = {
 
         // Cancel button opens dropdown for manual selection
         document.getElementById('status-cancel').addEventListener('click', () => {
-            renderStatus('Izaberite stanicu', false);
-            self.toggle();
+            Geolocation.cancelledByUser = true;
+            hide('status');
+            self.open();
         });
 
         // Close when clicking outside
