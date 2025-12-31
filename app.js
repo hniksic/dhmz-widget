@@ -415,14 +415,27 @@ const LocationPicker = {
 
     open() {
         this.getDropdown().hidden = false;
+        // Push state so Android back button closes dropdown instead of exiting app
+        history.pushState({ dropdown: true }, '');
     },
 
-    close() {
+    /**
+     * Close the dropdown.
+     * @param {boolean} [popHistory=true] - Whether to pop the history state.
+     *        Set to false when closing in response to popstate (back button).
+     */
+    close(popHistory = true) {
+        if (!this.isOpen()) return;
         this.getDropdown().hidden = true;
+        if (popHistory) history.back();
     },
 
     toggle() {
-        this.getDropdown().hidden = !this.getDropdown().hidden;
+        if (this.isOpen()) {
+            this.close();
+        } else {
+            this.open();
+        }
     },
 
     // --- Option Management ---
@@ -453,8 +466,8 @@ const LocationPicker = {
         mapOpt.dataset.value = SHOW_MAP_OPTION;
         mapOpt.textContent = 'Izaberi na karti...';
         mapOpt.addEventListener('click', () => {
-            self.close();
-            StationMap.openModal();
+            self.close(false);  // Don't pop history, map will replace the state
+            StationMap.openModal(true);  // Replace dropdown's history entry
         });
         dropdown.appendChild(mapOpt);
 
@@ -566,8 +579,8 @@ const LocationPicker = {
                 if (currentIndex >= 0) {
                     const value = options[currentIndex].dataset.value;
                     if (value === SHOW_MAP_OPTION) {
-                        this.close();
-                        StationMap.openModal();
+                        this.close(false);  // Don't pop history, map will replace the state
+                        StationMap.openModal(true);  // Replace dropdown's history entry
                     } else {
                         this.select(value);
                     }
@@ -618,6 +631,7 @@ const LocationPicker = {
 
         // Keyboard navigation
         document.addEventListener('keydown', (e) => self.handleKeydown(e));
+
     }
 };
 
@@ -1280,20 +1294,41 @@ const StationMap = {
         if (label) label.hidden = true;
     },
 
-    /** Open the map modal */
-    openModal() {
+    /** Check if map modal is open */
+    isOpen() {
+        return !document.getElementById('map-modal').hidden;
+    },
+
+    /**
+     * Open the map modal.
+     * @param {boolean} [replaceState=false] - If true, replace current history state
+     *        instead of pushing. Used when transitioning from dropdown to map.
+     */
+    openModal(replaceState = false) {
         this.resetZoom();
         this.renderStations();
         document.getElementById('map-modal').hidden = false;
+        // Push/replace state so Android back button closes modal instead of exiting app
+        if (replaceState) {
+            history.replaceState({ mapModal: true }, '');
+        } else {
+            history.pushState({ mapModal: true }, '');
+        }
     },
 
-    /** Close the map modal */
-    closeModal() {
+    /**
+     * Close the map modal.
+     * @param {boolean} [popHistory=true] - Whether to pop the history state.
+     *        Set to false when closing in response to popstate (back button).
+     */
+    closeModal(popHistory = true) {
+        if (!this.isOpen()) return;
         document.getElementById('map-modal').hidden = true;
         this.hideTooltip();
         this.clearHighlight();
         this.clearTapped();
         this.resetZoom();
+        if (popHistory) history.back();
     },
 
     // --- Mouse Input Handlers ---
@@ -1565,3 +1600,29 @@ const StationMap = {
 
 // Initialize the map
 StationMap.init();
+
+/**
+ * History Management for Android Back Button
+ *
+ * On Android PWAs, the back button triggers a popstate event. We use the
+ * History API to intercept this and close modals/dropdowns instead of
+ * exiting the app.
+ *
+ * How it works:
+ * - open()/openModal() push a history state
+ * - close()/closeModal() pop history by default (popHistory=true)
+ * - The popstate handler closes whatever is open (with popHistory=false
+ *   since the browser already popped the state)
+ *
+ * Special case - dropdown → map transition:
+ * - close(false) skips history.back() to avoid triggering popstate
+ * - openModal(true) uses replaceState instead of pushState
+ * - This keeps a single history entry, so back closes the map cleanly
+ */
+window.addEventListener('popstate', () => {
+    if (StationMap.isOpen()) {
+        StationMap.closeModal(false);
+    } else if (LocationPicker.isOpen()) {
+        LocationPicker.close(false);
+    }
+});
