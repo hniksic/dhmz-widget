@@ -49,6 +49,21 @@ const PROXY_URL = 'https://corsproxy.io/?';
 /** Special location that uses geolocation to find nearest station */
 const DETECTED_LOCATION = 'Najbliže';
 
+/**
+ * City prefixes for stations that should display as "City" in title
+ * with sub-location (e.g., "Grič", "aerodrom") shown next to the time.
+ * Pattern: "City-Location" where City is in this list.
+ */
+const CITY_STATION_PREFIXES = [
+    'Dubrovnik',
+    'Osijek',
+    'Pula',
+    'Rijeka',
+    'Split',
+    'Zadar',
+    'Zagreb',
+];
+
 /** LocalStorage key for selected location */
 const LOCATION_KEY = 'dhmz-location';
 
@@ -606,6 +621,27 @@ function show(id) { document.getElementById(id).hidden = false; }
 function hide(id) { document.getElementById(id).hidden = true; }
 function setText(id, text) { document.getElementById(id).textContent = text; }
 
+/**
+ * Parses station name into display components.
+ * For city stations (e.g., "Zagreb-Grič"), returns city as title and location as subtitle.
+ * For other stations, returns full name as title with no subtitle.
+ * @param {string} name - Station name
+ * @returns {{title: string, subtitle: string|null}}
+ */
+function parseStationName(name) {
+    const hyphenIndex = name.indexOf('-');
+    if (hyphenIndex > 0) {
+        const prefix = name.substring(0, hyphenIndex);
+        if (CITY_STATION_PREFIXES.includes(prefix)) {
+            return {
+                title: prefix,
+                subtitle: name.substring(hyphenIndex + 1)
+            };
+        }
+    }
+    return { title: name, subtitle: null };
+}
+
 /** Threshold for showing distance warning (in km) */
 const DISTANCE_WARNING_THRESHOLD = 20;
 
@@ -623,7 +659,9 @@ function render(station, distance) {
     document.getElementById('pressure-container').classList.add('empty');
     document.getElementById('wind-container').classList.add('empty');
 
-    setText('title', station.name);
+    // Parse station name for city stations (e.g., "Zagreb-Grič" → "Zagreb" + "Grič")
+    const { title, subtitle } = parseStationName(station.name);
+    setText('title', title);
     setText('temperature', station.temperature.toFixed(1));
 
     // Format and display measurement time, with stale color if needed
@@ -633,6 +671,15 @@ function render(station, distance) {
     timeEl.textContent = formattedTime;
     timeEl.classList.toggle('stale', isStale);
     timeEl.hidden = !formattedTime;
+
+    // Show station subtitle for city stations (e.g., "Grič" for Zagreb-Grič)
+    const subtitleEl = document.getElementById('station-subtitle');
+    if (subtitle) {
+        setText('subtitle-value', subtitle);
+        subtitleEl.hidden = false;
+    } else {
+        subtitleEl.hidden = true;
+    }
 
     // Show distance warning if station is far away
     const distanceWarning = document.getElementById('distance-warning');
