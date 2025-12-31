@@ -80,7 +80,7 @@ let userCoords = null;
  * 1. If userCoords available → show weather for nearest station
  * 2. If userCoords not available:
  *    - geoStatus 'unknown' → show "Tražim lokaciju..." with cancel button
- *      - Cancel opens dropdown for manual station selection
+ *      - Cancel shows "Izaberite stanicu" and opens dropdown for manual selection
  *      - Re-selecting "Najbliže" retries geolocation (resets geoStatus to 'unknown')
  *    - geoStatus 'denied' → show error with instructions to enable in device settings
  *    - geoStatus 'unavailable' → show error suggesting manual selection
@@ -480,7 +480,7 @@ document.getElementById('location-trigger').addEventListener('click', (e) => {
 
 // Cancel button opens dropdown so user can pick a station
 document.getElementById('status-cancel').addEventListener('click', () => {
-    hide('status');
+    renderStatus('Izaberite stanicu', false);
     toggleLocationDropdown();
 });
 
@@ -733,11 +733,13 @@ function renderError(message) {
 /**
  * Renders a status/loading message to the widget.
  * @param {string} message
+ * @param {boolean} [showCancel=true] - Whether to show the cancel button
  */
-function renderStatus(message) {
+function renderStatus(message, showCancel = true) {
     hide('weather');
     hide('error');
     setText('status-message', message);
+    document.getElementById('status-cancel').hidden = !showCancel;
     show('status');
 }
 
