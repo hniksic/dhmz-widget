@@ -893,7 +893,7 @@ const StationMap = {
         },
         /** Croatia lat/lon bounding box (with padding) */
         bounds: { minLon: 13.2, maxLon: 19.6, minLat: 42.2, maxLat: 46.7 },
-        /** Snap distance for station selection (km) */
+        /** Snap distance for station selection (km) at zoom level 1 */
         snapDistance: 20,
         /** Zoom limits */
         minZoom: 1,
@@ -1133,7 +1133,8 @@ const StationMap = {
     findNearestWithinSnap(lat, lon) {
         if (!cachedStations) return null;
         let nearest = null;
-        let minDist = this.config.snapDistance;
+        // Divide by zoom scale so snap distance stays constant in screen space
+        let minDist = this.config.snapDistance / this.zoom.scale;
 
         for (const [name, station] of Object.entries(cachedStations)) {
             if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
