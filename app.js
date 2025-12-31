@@ -993,6 +993,8 @@ function updateCirclePositions() {
 
 /** Handle station selection from map */
 function selectStationFromMap(stationName) {
+    // Don't select if we just finished dragging
+    if (mouseDragEnded) return;
     onLocationSelect(stationName);
     closeMapModal();
 }
@@ -1262,8 +1264,64 @@ function onMapWheel(event) {
     updateCirclePositions();
 }
 
+/** Tracks if a mouse drag just ended (to prevent modal close) */
+let mouseDragEnded = false;
+
+/** Handle mouse down on map (start drag when zoomed) */
+function onMapMouseDown(event) {
+    if (mapZoom.scale > 1) {
+        event.preventDefault();
+        panState = {
+            startX: event.clientX,
+            startY: event.clientY,
+            initialZoomX: mapZoom.x,
+            initialZoomY: mapZoom.y,
+            moved: false
+        };
+        // Listen for mouseup anywhere (in case mouse leaves the map while dragging)
+        document.addEventListener('mouseup', onDocumentMouseUp);
+    }
+}
+
+/** Handle mouse up anywhere (end drag) */
+function onDocumentMouseUp(event) {
+    if (panState && panState.moved) {
+        mouseDragEnded = true;
+        // Reset flag after a short delay (to catch the click event)
+        setTimeout(() => { mouseDragEnded = false; }, 0);
+    }
+    panState = null;
+    document.removeEventListener('mouseup', onDocumentMouseUp);
+}
+
+/** Handle mouse up on map (end drag) */
+function onMapMouseUp(event) {
+    // Handled by onDocumentMouseUp when dragging
+}
+
 /** Handle pointer move on map */
 function onMapPointerMove(event) {
+    // Handle dragging when zoomed
+    if (panState) {
+        const svg = document.getElementById('station-map');
+        const rect = svg.getBoundingClientRect();
+
+        const deltaX = (event.clientX - panState.startX) / rect.width * MAP_CONFIG.viewBox.width / mapZoom.scale;
+        const deltaY = (event.clientY - panState.startY) / rect.height * MAP_CONFIG.viewBox.height / mapZoom.scale;
+
+        if (Math.abs(event.clientX - panState.startX) > 5 || Math.abs(event.clientY - panState.startY) > 5) {
+            panState.moved = true;
+        }
+
+        mapZoom.x = panState.initialZoomX - deltaX;
+        mapZoom.y = panState.initialZoomY - deltaY;
+
+        clampMapPan();
+        updateCirclePositions();
+        hideMapTooltip();
+        return;
+    }
+
     const { x, y } = eventToSvgCoords(event);
     const nearest = updatePrehighlight(x, y);
 
@@ -1277,6 +1335,8 @@ function onMapPointerMove(event) {
 
 /** Handle click/tap on map */
 function onMapClick(event) {
+    // Don't select if we just finished dragging
+    if (mouseDragEnded) return;
     // If we have a prehighlighted station, select it
     if (prehighlightedStation) {
         selectStationFromMap(prehighlightedStation);
@@ -1396,11 +1456,14 @@ document.getElementById('map-close').addEventListener('click', closeMapModal);
 // SVG map interaction
 // -----------------------------------------------------------------
 // Desktop: hover highlights nearest station + shows tooltip,
-//          single-click selects and closes map
+//          single-click selects and closes map,
+//          scroll wheel to zoom, drag to pan when zoomed in
 // Mobile:  tap highlights station + shows label, second tap selects,
 //          pinch to zoom, drag to pan when zoomed in
 // -----------------------------------------------------------------
 const stationMap = document.getElementById('station-map');
+stationMap.addEventListener('mousedown', onMapMouseDown);
+stationMap.addEventListener('mouseup', onMapMouseUp);
 stationMap.addEventListener('mousemove', onMapPointerMove);
 stationMap.addEventListener('touchmove', (e) => {
     // Handle pinch zoom or pan
@@ -1438,11 +1501,14 @@ stationMap.addEventListener('touchend', (e) => {
 });
 stationMap.addEventListener('click', onMapClick);
 stationMap.addEventListener('mouseleave', () => {
+    // Note: drag continues even if mouse leaves map (handled by document mouseup)
     clearPrehighlight();
     hideMapTooltip();
 });
 stationMap.addEventListener('wheel', onMapWheel, { passive: false });
 document.getElementById('map-modal').addEventListener('click', (e) => {
+    // Don't close if we just finished dragging the map
+    if (mouseDragEnded) return;
     if (e.target.id === 'map-modal') closeMapModal();
 });
 document.addEventListener('keydown', (e) => {
