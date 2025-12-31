@@ -163,8 +163,8 @@ const REFRESH_INTERVAL = 15 * 60 * 1000;
 /** Data older than this is considered stale (1 hour) */
 const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
-/** Data older than this should show date, not just hour (23 hours) */
-const SHOW_DATE_THRESHOLD_MS = 23 * 60 * 60 * 1000;
+/** Data older than this shows "staro" instead of the hour (23 hours) */
+const OLD_THRESHOLD_MS = 23 * 60 * 60 * 1000;
 
 /**
  * @typedef {Object} StationData
@@ -821,9 +821,9 @@ function formatMeasurementTime(measurementTime) {
     const measurementDate = new Date(year, month - 1, day, hour);
     const ageMs = Date.now() - measurementDate;
 
-    // Omit time entirely if very old, otherwise show as "19h"
-    const formattedTime = ageMs > SHOW_DATE_THRESHOLD_MS
-        ? ''
+    // Show "staro" if very old, otherwise show as "19h"
+    const formattedTime = ageMs > OLD_THRESHOLD_MS
+        ? 'staro'
         : `${measurementDate.getHours()}h`;
 
     return {
