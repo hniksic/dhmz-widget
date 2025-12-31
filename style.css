@@ -307,7 +307,7 @@ body {
     border-radius: 16px;
     padding: 6px;
     min-width: 220px;
-    max-height: 300px;
+    max-height: min(400px, 60vh);
     overflow-y: auto;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     z-index: 100;
@@ -341,6 +341,13 @@ body {
     .location-dropdown {
         left: auto;
         right: 0;
+    }
+}
+
+/* Larger dropdown on desktop */
+@media (min-height: 600px) and (pointer: fine) {
+    .location-dropdown {
+        max-height: min(500px, 70vh);
     }
 }
 
