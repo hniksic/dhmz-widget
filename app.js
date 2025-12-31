@@ -70,26 +70,92 @@ const LOCATION_KEY = 'dhmz-location';
 /** Cached station data from last fetch */
 let cachedStations = null;
 
-/** Cached user coordinates from geolocation */
-let userCoords = null;
-
 /**
- * Geolocation status: 'unknown' | 'granted' | 'denied' | 'unavailable'
+ * Geolocation - Handles user location detection.
  *
  * Flow when user selects "Najbliža" (nearest station):
- * 1. If userCoords available → show weather for nearest station
- * 2. If userCoords not available:
- *    - geoStatus 'unknown' → show "Tražim lokaciju..." with cancel button
+ * 1. If coords available → show weather for nearest station
+ * 2. If coords not available:
+ *    - status 'unknown' → show "Tražim lokaciju..." with cancel button
  *      - Cancel shows "Izaberite stanicu" and opens dropdown for manual selection
- *      - Re-selecting "Najbliža" retries geolocation (resets geoStatus to 'unknown')
- *    - geoStatus 'denied' → show error with instructions to enable in device settings
- *    - geoStatus 'unavailable' → show error suggesting manual selection
+ *      - Re-selecting "Najbliža" retries geolocation (resets status to 'unknown')
+ *    - status 'denied' → show error with instructions to enable in device settings
+ *    - status 'unavailable' → show error suggesting manual selection
  * 3. When geolocation resolves:
- *    - Success → set geoStatus='granted', cache userCoords, render weather
- *    - Permission denied (code 1) → set geoStatus='denied', show error
- *    - Other failure (timeout, etc.) → set geoStatus='unavailable', show error
+ *    - Success → set status='granted', cache coords, render weather
+ *    - Permission denied (code 1) → set status='denied', show error
+ *    - Other failure (timeout, etc.) → set status='unavailable', show error
  */
-let geoStatus = 'unknown';
+const Geolocation = {
+    /** Status: 'unknown' | 'granted' | 'denied' | 'unavailable' */
+    status: 'unknown',
+    /** Cached coordinates from last successful geolocation */
+    coords: null,
+
+    /** Check if coordinates are available */
+    hasCoords() {
+        return this.coords !== null;
+    },
+
+    /**
+     * Request user's geolocation and cache coordinates.
+     * On first visit, auto-selects "Najbliža" location.
+     */
+    request() {
+        if (!('geolocation' in navigator)) {
+            console.log('[DHMZ] Geolocation not available');
+            this.status = 'unavailable';
+            LocationPicker.updateDetectedLabel();
+            return;
+        }
+
+        const self = this;
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                self.status = 'granted';
+                self.coords = {
+                    lat: position.coords.latitude,
+                    lon: position.coords.longitude
+                };
+                console.log('[DHMZ] User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
+
+                // On first visit, auto-select "Najbliža"
+                if (!hasSelectedLocation()) {
+                    setSelectedLocation(DETECTED_LOCATION);
+                }
+
+                // Update dropdown and re-render if "Najbliža" is selected
+                LocationPicker.updateDetectedLabel();
+                if (getSelectedLocation() === DETECTED_LOCATION) {
+                    LocationPicker.updateSelection(DETECTED_LOCATION);
+                    renderSelectedStation();
+                }
+            },
+            (error) => {
+                console.log('[DHMZ] Geolocation denied or failed:', error.message, 'code:', error.code);
+                // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
+                self.status = error.code === 1 ? 'denied' : 'unavailable';
+                LocationPicker.updateDetectedLabel();
+
+                // If "Najbliža" is currently selected and we can't get location, render a message
+                if (getSelectedLocation() === DETECTED_LOCATION) {
+                    renderSelectedStation();
+                }
+            },
+            { timeout: 10000, maximumAge: 300000 }
+        );
+    },
+
+    /**
+     * Retry geolocation (resets status to allow fresh attempt).
+     * Called when user re-selects "Najbliža" after a previous failure.
+     */
+    retry() {
+        this.status = 'unknown';
+        LocationPicker.updateDetectedLabel();
+        this.request();
+    }
+};
 
 /** Refresh interval in milliseconds (15 minutes) */
 const REFRESH_INTERVAL = 15 * 60 * 1000;
@@ -159,8 +225,8 @@ async function fetchWeatherData() {
         const stationNames = Object.keys(cachedStations).sort(collator.compare);
         console.log('[DHMZ] Found stations:', stationNames.join(', ') || 'none');
 
-        updateLocationPicker(stationNames);
-        requestGeolocation();
+        LocationPicker.populate(stationNames);
+        Geolocation.request();
         renderSelectedStation();
 
     } catch (error) {
@@ -248,8 +314,8 @@ function extractAllStations(xmlDoc, measurementTime) {
 function getStationForLocation(allStations, location) {
     if (location === DETECTED_LOCATION) {
         // Use geolocation to find nearest station
-        if (userCoords) {
-            const nearest = findNearestStation(allStations, userCoords.lat, userCoords.lon);
+        if (Geolocation.hasCoords()) {
+            const nearest = findNearestStation(allStations, Geolocation.coords.lat, Geolocation.coords.lon);
             return nearest ? { station: allStations[nearest.name], distance: nearest.distance } : null;
         }
         return null;
@@ -315,217 +381,179 @@ function setSelectedLocation(location) {
     localStorage.setItem(LOCATION_KEY, location);
 }
 
-/**
- * Request user's geolocation and cache coordinates.
- * On first visit, auto-selects "Najbliža" location.
- */
-function requestGeolocation() {
-    if (!('geolocation' in navigator)) {
-        console.log('[DHMZ] Geolocation not available');
-        geoStatus = 'unavailable';
-        updateDetectedDropdownOption();
-        return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            geoStatus = 'granted';
-            userCoords = {
-                lat: position.coords.latitude,
-                lon: position.coords.longitude
-            };
-            console.log('[DHMZ] User location:', userCoords.lat.toFixed(4), userCoords.lon.toFixed(4));
-
-            // On first visit, auto-select "Najbliža"
-            if (!hasSelectedLocation()) {
-                setSelectedLocation(DETECTED_LOCATION);
-            }
-
-            // Update dropdown and re-render if "Najbliža" is selected
-            updateDetectedDropdownOption();
-            if (getSelectedLocation() === DETECTED_LOCATION) {
-                updateDropdownSelection(DETECTED_LOCATION);
-                renderSelectedStation();
-            }
-        },
-        (error) => {
-            console.log('[DHMZ] Geolocation denied or failed:', error.message, 'code:', error.code);
-            // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
-            geoStatus = error.code === 1 ? 'denied' : 'unavailable';
-            updateDetectedDropdownOption();
-
-            // If "Najbliža" is currently selected and we can't get location, render a message
-            if (getSelectedLocation() === DETECTED_LOCATION) {
-                renderSelectedStation();
-            }
-        },
-        { timeout: 10000, maximumAge: 300000 }
-    );
-}
-
-/** Special value for "show map" option */
+/** Special value for "show map" option in dropdown */
 const SHOW_MAP_OPTION = '__show_map__';
 
 /**
- * Updates the location picker dropdown with available stations.
- * @param {string[]} stationNames
+ * LocationPicker - Handles the station selection dropdown.
  */
-function updateLocationPicker(stationNames) {
-    const dropdown = document.getElementById('location-dropdown');
-    const currentValue = getSelectedLocation();
+const LocationPicker = {
+    // --- State ---
+    /** Type-ahead search buffer */
+    searchBuffer: '',
+    /** Timer for clearing search buffer */
+    searchTimeout: null,
 
-    // Clear and rebuild options
-    dropdown.innerHTML = '';
+    // --- DOM Helpers ---
+    getDropdown() {
+        return document.getElementById('location-dropdown');
+    },
 
-    // Add "Najbliža" first
-    const nearestOpt = document.createElement('div');
-    nearestOpt.className = 'location-option' + (DETECTED_LOCATION === currentValue ? ' selected' : '');
-    nearestOpt.setAttribute('role', 'option');
-    nearestOpt.dataset.value = DETECTED_LOCATION;
-    nearestOpt.textContent = getDropdownLabel(DETECTED_LOCATION);
-    nearestOpt.addEventListener('click', () => onLocationSelect(DETECTED_LOCATION));
-    dropdown.appendChild(nearestOpt);
+    getOptions() {
+        return [...this.getDropdown().querySelectorAll('.location-option')];
+    },
 
-    // Add "Show map" option second
-    const mapOpt = document.createElement('div');
-    mapOpt.className = 'location-option map-option';
-    mapOpt.setAttribute('role', 'option');
-    mapOpt.dataset.value = SHOW_MAP_OPTION;
-    mapOpt.textContent = 'Izaberi na karti...';
-    mapOpt.addEventListener('click', () => {
-        closeLocationDropdown();
-        openMapModal();
-    });
-    dropdown.appendChild(mapOpt);
+    // --- Dropdown State ---
+    isOpen() {
+        return !this.getDropdown().hidden;
+    },
 
-    // Add all station options
-    stationNames.forEach(name => {
-        const opt = document.createElement('div');
-        opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
-        opt.setAttribute('role', 'option');
-        opt.dataset.value = name;
-        opt.textContent = name;
-        opt.addEventListener('click', () => onLocationSelect(name));
-        dropdown.appendChild(opt);
-    });
-}
+    open() {
+        this.getDropdown().hidden = false;
+    },
 
-/**
- * Gets the display label for a dropdown option.
- * @param {string} location
- * @returns {string}
- */
-function getDropdownLabel(location) {
-    if (location === DETECTED_LOCATION) {
-        if (userCoords && cachedStations) {
-            const nearest = findNearestStation(cachedStations, userCoords.lat, userCoords.lon);
-            if (nearest) return `${DETECTED_LOCATION} (${nearest.name})`;
+    close() {
+        this.getDropdown().hidden = true;
+    },
+
+    toggle() {
+        this.getDropdown().hidden = !this.getDropdown().hidden;
+    },
+
+    // --- Option Management ---
+    /**
+     * Populate dropdown with station options.
+     * @param {string[]} stationNames - Sorted list of station names
+     */
+    populate(stationNames) {
+        const dropdown = this.getDropdown();
+        const currentValue = getSelectedLocation();
+        const self = this;
+
+        dropdown.innerHTML = '';
+
+        // Add "Najbliža" first
+        const nearestOpt = document.createElement('div');
+        nearestOpt.className = 'location-option' + (DETECTED_LOCATION === currentValue ? ' selected' : '');
+        nearestOpt.setAttribute('role', 'option');
+        nearestOpt.dataset.value = DETECTED_LOCATION;
+        nearestOpt.textContent = this.getLabel(DETECTED_LOCATION);
+        nearestOpt.addEventListener('click', () => self.select(DETECTED_LOCATION));
+        dropdown.appendChild(nearestOpt);
+
+        // Add "Show map" option second
+        const mapOpt = document.createElement('div');
+        mapOpt.className = 'location-option map-option';
+        mapOpt.setAttribute('role', 'option');
+        mapOpt.dataset.value = SHOW_MAP_OPTION;
+        mapOpt.textContent = 'Izaberi na karti...';
+        mapOpt.addEventListener('click', () => {
+            self.close();
+            StationMap.openModal();
+        });
+        dropdown.appendChild(mapOpt);
+
+        // Add all station options
+        stationNames.forEach(name => {
+            const opt = document.createElement('div');
+            opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
+            opt.setAttribute('role', 'option');
+            opt.dataset.value = name;
+            opt.textContent = name;
+            opt.addEventListener('click', () => self.select(name));
+            dropdown.appendChild(opt);
+        });
+    },
+
+    /**
+     * Get display label for an option.
+     * @param {string} location
+     * @returns {string}
+     */
+    getLabel(location) {
+        if (location === DETECTED_LOCATION) {
+            if (Geolocation.hasCoords() && cachedStations) {
+                const nearest = findNearestStation(cachedStations, Geolocation.coords.lat, Geolocation.coords.lon);
+                if (nearest) return `${DETECTED_LOCATION} (${nearest.name})`;
+            }
+            if (Geolocation.status === 'denied') return `${DETECTED_LOCATION} (lokacija onemogućena)`;
+            if (Geolocation.status === 'unavailable') return `${DETECTED_LOCATION} (lokacija nedostupna)`;
+            return DETECTED_LOCATION;
         }
-        if (geoStatus === 'denied') return `${DETECTED_LOCATION} (lokacija onemogućena)`;
-        if (geoStatus === 'unavailable') return `${DETECTED_LOCATION} (lokacija nedostupna)`;
-        return DETECTED_LOCATION;
-    }
-    return location;
-}
+        return location;
+    },
 
-/** Update the "Najbliža" dropdown option text after geolocation resolves */
-function updateDetectedDropdownOption() {
-    const dropdown = document.getElementById('location-dropdown');
-    const opt = dropdown.querySelector(`[data-value="${DETECTED_LOCATION}"]`);
-    if (opt) {
-        opt.textContent = getDropdownLabel(DETECTED_LOCATION);
-    }
-}
+    /** Update the "Najbliža" option text after geolocation resolves */
+    updateDetectedLabel() {
+        const opt = this.getDropdown().querySelector(`[data-value="${DETECTED_LOCATION}"]`);
+        if (opt) {
+            opt.textContent = this.getLabel(DETECTED_LOCATION);
+        }
+    },
 
-/** Handle location selection from custom dropdown */
-function onLocationSelect(value) {
-    setSelectedLocation(value);
-    closeLocationDropdown();
-    updateDropdownSelection(value);
+    /** Update visual selection state in dropdown */
+    updateSelection(value) {
+        this.getOptions().forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.value === value);
+        });
+    },
 
-    // If selecting "Najbliža" without coords, retry geolocation
-    // (user may have just enabled permissions in settings)
-    if (value === DETECTED_LOCATION && !userCoords) {
-        geoStatus = 'unknown'; // Reset so we don't flash the error
-        updateDetectedDropdownOption();
-        requestGeolocation();
-    }
+    /**
+     * Handle option selection.
+     * @param {string} value - Station name or DETECTED_LOCATION
+     */
+    select(value) {
+        setSelectedLocation(value);
+        this.close();
+        this.updateSelection(value);
 
-    renderSelectedStation();
-}
+        // If selecting "Najbliža" without coords, retry geolocation
+        // (user may have just enabled permissions in settings)
+        if (value === DETECTED_LOCATION && !Geolocation.hasCoords()) {
+            Geolocation.retry();
+        }
 
-/** Toggle the location dropdown */
-function toggleLocationDropdown() {
-    const dropdown = document.getElementById('location-dropdown');
-    dropdown.hidden = !dropdown.hidden;
-}
+        renderSelectedStation();
+    },
 
-/** Close the location dropdown */
-function closeLocationDropdown() {
-    document.getElementById('location-dropdown').hidden = true;
-}
-
-/** Update visual selection state in dropdown */
-function updateDropdownSelection(value) {
-    document.querySelectorAll('.location-option').forEach(opt => {
-        opt.classList.toggle('selected', opt.dataset.value === value);
-    });
-}
-
-// Set up dropdown toggle
-document.getElementById('location-trigger').addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleLocationDropdown();
-});
-
-// Cancel button opens dropdown so user can pick a station
-document.getElementById('status-cancel').addEventListener('click', () => {
-    renderStatus('Izaberite stanicu', false);
-    toggleLocationDropdown();
-});
-
-// Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-    if (!e.target.closest('.location-picker')) {
-        closeLocationDropdown();
-    }
-});
-
-// Keyboard navigation for dropdown
-(function() {
-    let searchBuffer = '';
-    let searchTimeout = null;
-
-    function focusOption(options, index) {
+    // --- Keyboard Navigation ---
+    /** Focus an option by index */
+    focusOption(index) {
+        const options = this.getOptions();
         options.forEach((opt, i) => {
             opt.classList.toggle('focused', i === index);
         });
         if (index >= 0 && options[index]) {
             options[index].scrollIntoView({ block: 'nearest' });
         }
-    }
+    },
 
-    document.addEventListener('keydown', (e) => {
-        const dropdown = document.getElementById('location-dropdown');
-        if (dropdown.hidden) return;
+    /** Get currently focused option index */
+    getFocusedIndex() {
+        return this.getOptions().findIndex(opt => opt.classList.contains('focused'));
+    },
 
-        const options = [...dropdown.querySelectorAll('.location-option')];
-        const currentIndex = options.findIndex(opt => opt.classList.contains('focused'));
+    /** Handle keyboard events */
+    handleKeydown(e) {
+        if (!this.isOpen()) return;
+
+        const options = this.getOptions();
+        const currentIndex = this.getFocusedIndex();
 
         switch (e.key) {
             case 'Escape':
-                closeLocationDropdown();
+                this.close();
                 e.preventDefault();
                 break;
 
             case 'ArrowDown':
                 e.preventDefault();
-                focusOption(options, currentIndex < options.length - 1 ? currentIndex + 1 : 0);
+                this.focusOption(currentIndex < options.length - 1 ? currentIndex + 1 : 0);
                 break;
 
             case 'ArrowUp':
                 e.preventDefault();
-                focusOption(options, currentIndex > 0 ? currentIndex - 1 : options.length - 1);
+                this.focusOption(currentIndex > 0 ? currentIndex - 1 : options.length - 1);
                 break;
 
             case 'Enter':
@@ -533,10 +561,10 @@ document.addEventListener('click', (e) => {
                 if (currentIndex >= 0) {
                     const value = options[currentIndex].dataset.value;
                     if (value === SHOW_MAP_OPTION) {
-                        closeLocationDropdown();
-                        openMapModal();
+                        this.close();
+                        StationMap.openModal();
                     } else {
-                        onLocationSelect(value);
+                        this.select(value);
                     }
                 }
                 break;
@@ -545,21 +573,51 @@ document.addEventListener('click', (e) => {
                 // Type-ahead search
                 if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
                     e.preventDefault();
-                    searchBuffer += e.key.toLowerCase();
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(() => { searchBuffer = ''; }, 500);
+                    this.searchBuffer += e.key.toLowerCase();
+                    clearTimeout(this.searchTimeout);
+                    this.searchTimeout = setTimeout(() => { this.searchBuffer = ''; }, 500);
 
                     const match = options.findIndex(opt =>
-                        opt.textContent.toLowerCase().startsWith(searchBuffer)
+                        opt.textContent.toLowerCase().startsWith(this.searchBuffer)
                     );
                     if (match >= 0) {
-                        focusOption(options, match);
+                        this.focusOption(match);
                     }
                 }
                 break;
         }
-    });
-})();
+    },
+
+    // --- Initialization ---
+    init() {
+        const self = this;
+
+        // Toggle on trigger click
+        document.getElementById('location-trigger').addEventListener('click', (e) => {
+            e.stopPropagation();
+            self.toggle();
+        });
+
+        // Cancel button opens dropdown for manual selection
+        document.getElementById('status-cancel').addEventListener('click', () => {
+            renderStatus('Izaberite stanicu', false);
+            self.toggle();
+        });
+
+        // Close when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.location-picker')) {
+                self.close();
+            }
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => self.handleKeydown(e));
+    }
+};
+
+// Initialize location picker
+LocationPicker.init();
 
 /** Render the currently selected station from cached data */
 function renderSelectedStation() {
@@ -576,11 +634,11 @@ function renderSelectedStation() {
 
     // If DETECTED_LOCATION selected but no coords yet
     if (!result && selectedLocation === DETECTED_LOCATION) {
-        if (geoStatus === 'denied') {
+        if (Geolocation.status === 'denied') {
             renderError('Lokacija je onemogućena. Omogućite lokaciju u postavkama uređaja ili izaberite stanicu ručno.');
             return;
         }
-        if (geoStatus === 'unavailable') {
+        if (Geolocation.status === 'unavailable') {
             renderError('Lokacija nije dostupna. Izaberite stanicu ručno.');
             return;
         }
@@ -594,7 +652,7 @@ function renderSelectedStation() {
         console.warn('[DHMZ] Station not found, falling back to detected:', selectedLocation);
         selectedLocation = DETECTED_LOCATION;
         setSelectedLocation(selectedLocation);
-        updateDropdownSelection(selectedLocation);
+        LocationPicker.updateSelection(selectedLocation);
         // If still no station (no coords), just return and wait
         result = getStationForLocation(cachedStations, selectedLocation);
         if (!result) return;
@@ -807,712 +865,697 @@ document.getElementById('condition-container').addEventListener('click', fetchWe
 
 // --- Station Map ---
 
-/** Latitude correction factor - tuned to match Google Maps appearance */
-const LAT_CORRECTION = 0.85;
-
-/** Original SVG width before latitude correction */
-const ORIGINAL_SVG_WIDTH = 610;
-
-/** SVG dimensions and Croatia bounding box for coordinate mapping */
-const MAP_CONFIG = {
-    viewBox: { width: ORIGINAL_SVG_WIDTH * LAT_CORRECTION, height: 476 },
-    // Croatia lat/lon bounding box (with padding)
-    bounds: {
-        minLon: 13.2,
-        maxLon: 19.6,
-        minLat: 42.2,
-        maxLat: 46.7
+/**
+ * StationMap - Handles all map-related state and interactions.
+ *
+ * Interaction modes:
+ * - Desktop: hover highlights nearest station + shows tooltip,
+ *            single-click selects and closes map,
+ *            scroll wheel to zoom, drag to pan when zoomed in
+ * - Mobile:  tap highlights station + shows label, second tap selects,
+ *            pinch to zoom, drag to pan when zoomed in
+ */
+const StationMap = {
+    // --- Configuration ---
+    config: {
+        /** Latitude correction factor - tuned to match Google Maps appearance */
+        latCorrection: 0.85,
+        /** Original SVG width before latitude correction */
+        originalWidth: 610,
+        /** SVG viewBox dimensions (width is corrected for latitude) */
+        get viewBox() {
+            return { width: this.originalWidth * this.latCorrection, height: 476 };
+        },
+        /** Croatia lat/lon bounding box (with padding) */
+        bounds: { minLon: 13.2, maxLon: 19.6, minLat: 42.2, maxLat: 46.7 },
+        /** Snap distance for station selection (km) */
+        snapDistance: 20,
+        /** Zoom limits */
+        minZoom: 1,
+        maxZoom: 6
     },
-    // Snap distance for station selection (km)
-    snapDistance: 20
-};
 
-/** Currently prehighlighted station name */
-let prehighlightedStation = null;
+    // --- State ---
+    /** Current zoom/pan state: scale and pan offset in base (unzoomed) coordinates */
+    zoom: { scale: 1, x: 0, y: 0 },
+    /** Currently prehighlighted station name (desktop hover) */
+    highlight: null,
+    /** Currently tapped station name (mobile two-tap selection) */
+    tapped: null,
+    /** Active pan/drag state (shared by mouse and touch) */
+    drag: null,
+    /** Active pinch-to-zoom state (touch only) */
+    pinch: null,
+    /** Tracks if a gesture (pinch/pan) occurred during current touch sequence */
+    gestureOccurred: false,
 
-/** Current map zoom state */
-let mapZoom = {
-    scale: 1,
-    // Pan offset in base (unzoomed) coordinates
-    x: 0,
-    y: 0
-};
+    // --- State Queries ---
+    isZoomed() { return this.zoom.scale > 1; },
+    isDragging() { return this.drag?.moved === true; },
+    isPinching() { return this.pinch !== null; },
 
-/** Zoom limits */
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 6;
+    // --- Coordinate Conversion ---
+    /**
+     * Converts lat/lon to base SVG coordinates (without zoom).
+     * @param {number} lat
+     * @param {number} lon
+     * @returns {{x: number, y: number}}
+     */
+    latLonToBase(lat, lon) {
+        const { bounds, viewBox } = this.config;
+        return {
+            x: (lon - bounds.minLon) / (bounds.maxLon - bounds.minLon) * viewBox.width,
+            y: (bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat) * viewBox.height
+        };
+    },
 
-/**
- * Converts lat/lon to base SVG coordinates (without zoom).
- * @param {number} lat - Latitude
- * @param {number} lon - Longitude
- * @returns {{x: number, y: number}}
- */
-function latLonToBaseSvg(lat, lon) {
-    const { bounds, viewBox } = MAP_CONFIG;
-    const x = (lon - bounds.minLon) / (bounds.maxLon - bounds.minLon) * viewBox.width;
-    const y = (bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat) * viewBox.height;
-    return { x, y };
-}
+    /**
+     * Converts lat/lon to SVG coordinates (with zoom applied).
+     * @param {number} lat
+     * @param {number} lon
+     * @returns {{x: number, y: number}}
+     */
+    latLonToSvg(lat, lon) {
+        const base = this.latLonToBase(lat, lon);
+        return {
+            x: (base.x - this.zoom.x) * this.zoom.scale,
+            y: (base.y - this.zoom.y) * this.zoom.scale
+        };
+    },
 
-/**
- * Converts lat/lon to SVG coordinates (with zoom applied).
- * @param {number} lat - Latitude
- * @param {number} lon - Longitude
- * @returns {{x: number, y: number}}
- */
-function latLonToSvg(lat, lon) {
-    const base = latLonToBaseSvg(lat, lon);
-    return {
-        x: (base.x - mapZoom.x) * mapZoom.scale,
-        y: (base.y - mapZoom.y) * mapZoom.scale
-    };
-}
+    /**
+     * Converts SVG coordinates back to lat/lon (accounting for zoom).
+     * @param {number} x - SVG x coordinate (in zoomed space)
+     * @param {number} y - SVG y coordinate (in zoomed space)
+     * @returns {{lat: number, lon: number}}
+     */
+    svgToLatLon(x, y) {
+        const { bounds, viewBox } = this.config;
+        const baseX = x / this.zoom.scale + this.zoom.x;
+        const baseY = y / this.zoom.scale + this.zoom.y;
+        return {
+            lon: (baseX / viewBox.width) * (bounds.maxLon - bounds.minLon) + bounds.minLon,
+            lat: bounds.maxLat - (baseY / viewBox.height) * (bounds.maxLat - bounds.minLat)
+        };
+    },
 
-/**
- * Converts SVG coordinates back to lat/lon (accounting for zoom).
- * @param {number} x - SVG x coordinate (in zoomed space)
- * @param {number} y - SVG y coordinate (in zoomed space)
- * @returns {{lat: number, lon: number}}
- */
-function svgToLatLon(x, y) {
-    const { bounds, viewBox } = MAP_CONFIG;
-    // Convert from zoomed coordinates to base coordinates
-    const baseX = x / mapZoom.scale + mapZoom.x;
-    const baseY = y / mapZoom.scale + mapZoom.y;
-    const lon = (baseX / viewBox.width) * (bounds.maxLon - bounds.minLon) + bounds.minLon;
-    const lat = bounds.maxLat - (baseY / viewBox.height) * (bounds.maxLat - bounds.minLat);
-    return { lat, lon };
-}
+    /**
+     * Converts a DOM event (mouse or touch) to SVG coordinates.
+     * @param {MouseEvent|TouchEvent} event
+     * @returns {{x: number, y: number}}
+     */
+    eventToSvg(event) {
+        const svg = document.getElementById('station-map');
+        const rect = svg.getBoundingClientRect();
+        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+        const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+        return {
+            x: (clientX - rect.left) / rect.width * this.config.viewBox.width,
+            y: (clientY - rect.top) / rect.height * this.config.viewBox.height
+        };
+    },
 
-/** Render station dots on the map */
-function renderMapStations() {
-    const dotsGroup = document.getElementById('station-dots');
-    const userGroup = document.getElementById('user-location');
-    if (!dotsGroup || !cachedStations) return;
+    // --- Core Operations ---
+    /** Clamp pan to keep content visible within viewBox */
+    clampPan() {
+        const visibleWidth = this.config.viewBox.width / this.zoom.scale;
+        const visibleHeight = this.config.viewBox.height / this.zoom.scale;
+        this.zoom.x = Math.max(0, Math.min(this.zoom.x, this.config.viewBox.width - visibleWidth));
+        this.zoom.y = Math.max(0, Math.min(this.zoom.y, this.config.viewBox.height - visibleHeight));
+    },
 
-    // Clear existing dots
-    dotsGroup.innerHTML = '';
-    userGroup.innerHTML = '';
+    /** Reset zoom to default (scale 1, no pan) */
+    resetZoom() {
+        this.zoom = { scale: 1, x: 0, y: 0 };
+    },
 
-    const selectedLocation = getSelectedLocation();
-    const selectedStation = selectedLocation === DETECTED_LOCATION
-        ? (userCoords ? findNearestStation(cachedStations, userCoords.lat, userCoords.lon)?.name : null)
-        : selectedLocation;
+    /**
+     * Apply zoom centered on a point, keeping that point fixed on screen.
+     * @param {number} newScale - Target zoom scale
+     * @param {number} centerX - SVG x coordinate to keep fixed
+     * @param {number} centerY - SVG y coordinate to keep fixed
+     */
+    zoomTo(newScale, centerX, centerY) {
+        const oldScale = this.zoom.scale;
+        newScale = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, newScale));
+        if (newScale === oldScale) return;
 
-    // Add station dots (fixed radius, positioned in zoomed coordinates)
-    for (const [name, station] of Object.entries(cachedStations)) {
-        if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
+        // Convert center to base coordinates
+        const baseX = centerX / oldScale + this.zoom.x;
+        const baseY = centerY / oldScale + this.zoom.y;
 
-        const { x, y } = latLonToSvg(station.lat, station.lon);
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        circle.setAttribute('cx', x);
-        circle.setAttribute('cy', y);
-        circle.setAttribute('r', 6);
-        circle.setAttribute('class', 'station-dot' + (name === selectedStation ? ' selected' : ''));
-        circle.setAttribute('data-station', name);
-        circle.setAttribute('data-lat', station.lat);
-        circle.setAttribute('data-lon', station.lon);
-        circle.addEventListener('click', () => selectStationFromMap(name));
-        circle.addEventListener('mouseenter', (e) => showMapTooltipAt(e, name));
-        circle.addEventListener('mouseleave', hideMapTooltip);
-        dotsGroup.appendChild(circle);
-    }
+        // Update scale and pan to keep center fixed
+        this.zoom.scale = newScale;
+        this.zoom.x = baseX - centerX / newScale;
+        this.zoom.y = baseY - centerY / newScale;
 
-    // Add user location marker if available (fixed radius)
-    if (userCoords) {
-        const { x, y } = latLonToSvg(userCoords.lat, userCoords.lon);
+        this.clampPan();
+        this.updatePositions();
+    },
 
-        // Pulse animation circle
-        const pulse = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        pulse.setAttribute('cx', x);
-        pulse.setAttribute('cy', y);
-        pulse.setAttribute('r', 6);
-        pulse.setAttribute('class', 'user-dot-pulse');
-        pulse.setAttribute('data-lat', userCoords.lat);
-        pulse.setAttribute('data-lon', userCoords.lon);
-        userGroup.appendChild(pulse);
+    // --- Rendering ---
+    /** Update the Croatia outline transform based on current zoom */
+    updateOutlineTransform() {
+        const outline = document.getElementById('croatia-outline');
+        if (outline) {
+            // Path uses original 610×476 coords; apply lat correction, pan, then zoom
+            outline.setAttribute('transform',
+                `scale(${this.zoom.scale}) translate(${-this.zoom.x}, ${-this.zoom.y}) scale(${this.config.latCorrection}, 1)`);
+        }
+    },
 
-        // Solid center dot
-        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        dot.setAttribute('cx', x);
-        dot.setAttribute('cy', y);
-        dot.setAttribute('r', 5);
-        dot.setAttribute('class', 'user-dot');
-        dot.setAttribute('data-lat', userCoords.lat);
-        dot.setAttribute('data-lon', userCoords.lon);
-        userGroup.appendChild(dot);
-    }
+    /** Update all circle positions based on current zoom (without recreating them) */
+    updatePositions() {
+        const self = this;
 
-    // Update the Croatia outline transform
-    updateOutlineTransform();
-}
-
-/** Update the Croatia outline transform based on zoom */
-function updateOutlineTransform() {
-    const outline = document.getElementById('croatia-outline');
-    if (outline) {
-        // The outline path was generated in the original 610×476 coordinate system.
-        // We apply: 1) lat correction to squish horizontally, 2) pan, 3) zoom
-        // Transforms apply right-to-left.
-        outline.setAttribute('transform',
-            `scale(${mapZoom.scale}) translate(${-mapZoom.x}, ${-mapZoom.y}) scale(${LAT_CORRECTION}, 1)`);
-    }
-}
-
-/** Update circle positions based on current zoom (without recreating them) */
-function updateCirclePositions() {
-    // Update station dots
-    document.querySelectorAll('.station-dot').forEach(dot => {
-        const lat = parseFloat(dot.getAttribute('data-lat'));
-        const lon = parseFloat(dot.getAttribute('data-lon'));
-        const { x, y } = latLonToSvg(lat, lon);
-        dot.setAttribute('cx', x);
-        dot.setAttribute('cy', y);
-    });
-
-    // Update user location dots
-    document.querySelectorAll('.user-dot, .user-dot-pulse').forEach(dot => {
-        const lat = parseFloat(dot.getAttribute('data-lat'));
-        const lon = parseFloat(dot.getAttribute('data-lon'));
-        if (isFinite(lat) && isFinite(lon)) {
-            const { x, y } = latLonToSvg(lat, lon);
+        // Update station dots
+        document.querySelectorAll('.station-dot').forEach(dot => {
+            const lat = parseFloat(dot.getAttribute('data-lat'));
+            const lon = parseFloat(dot.getAttribute('data-lon'));
+            const { x, y } = self.latLonToSvg(lat, lon);
             dot.setAttribute('cx', x);
             dot.setAttribute('cy', y);
+        });
+
+        // Update user location dots
+        document.querySelectorAll('.user-dot, .user-dot-pulse').forEach(dot => {
+            const lat = parseFloat(dot.getAttribute('data-lat'));
+            const lon = parseFloat(dot.getAttribute('data-lon'));
+            if (isFinite(lat) && isFinite(lon)) {
+                const { x, y } = self.latLonToSvg(lat, lon);
+                dot.setAttribute('cx', x);
+                dot.setAttribute('cy', y);
+            }
+        });
+
+        this.updateOutlineTransform();
+
+        // Update station label position if one is shown
+        if (this.tapped) {
+            this.showLabel(this.tapped);
         }
-    });
+    },
 
-    // Update outline transform
-    updateOutlineTransform();
+    /** Render all station dots and user location on the map */
+    renderStations() {
+        const dotsGroup = document.getElementById('station-dots');
+        const userGroup = document.getElementById('user-location');
+        if (!dotsGroup || !cachedStations) return;
 
-    // Update station label position if one is shown
-    if (tappedStation) {
-        showStationLabel(tappedStation);
-    }
-}
+        dotsGroup.innerHTML = '';
+        userGroup.innerHTML = '';
 
-/** Handle station selection from map */
-function selectStationFromMap(stationName) {
-    // Don't select if we just finished dragging
-    if (mouseDragEnded) return;
-    onLocationSelect(stationName);
-    closeMapModal();
-}
+        const selectedLocation = getSelectedLocation();
+        const coords = Geolocation.coords;
+        const selectedStation = selectedLocation === DETECTED_LOCATION
+            ? (coords ? findNearestStation(cachedStations, coords.lat, coords.lon)?.name : null)
+            : selectedLocation;
 
-/**
- * Find the nearest station to given lat/lon within snap distance.
- * @param {number} lat
- * @param {number} lon
- * @returns {string|null} Station name or null if none within range
- */
-function findNearestStationWithinSnap(lat, lon) {
-    if (!cachedStations) return null;
+        const self = this;
 
-    let nearest = null;
-    let minDist = MAP_CONFIG.snapDistance;
+        // Add station dots
+        for (const [name, station] of Object.entries(cachedStations)) {
+            if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
 
-    for (const [name, station] of Object.entries(cachedStations)) {
-        if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
-        const dist = haversineDistance(lat, lon, station.lat, station.lon);
-        if (dist < minDist) {
-            minDist = dist;
-            nearest = name;
+            const { x, y } = this.latLonToSvg(station.lat, station.lon);
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', x);
+            circle.setAttribute('cy', y);
+            circle.setAttribute('r', 6);
+            circle.setAttribute('class', 'station-dot' + (name === selectedStation ? ' selected' : ''));
+            circle.setAttribute('data-station', name);
+            circle.setAttribute('data-lat', station.lat);
+            circle.setAttribute('data-lon', station.lon);
+            circle.addEventListener('click', () => self.selectStation(name));
+            circle.addEventListener('mouseenter', (e) => self.showTooltip(e, name));
+            circle.addEventListener('mouseleave', () => self.hideTooltip());
+            dotsGroup.appendChild(circle);
         }
-    }
-    return nearest;
-}
 
-/** Update prehighlight based on pointer position */
-function updatePrehighlight(svgX, svgY) {
-    const { lat, lon } = svgToLatLon(svgX, svgY);
-    const nearest = findNearestStationWithinSnap(lat, lon);
+        // Add user location marker if available
+        if (coords) {
+            const { x, y } = this.latLonToSvg(coords.lat, coords.lon);
 
-    if (nearest !== prehighlightedStation) {
-        // Remove old prehighlight
+            const pulse = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            pulse.setAttribute('cx', x);
+            pulse.setAttribute('cy', y);
+            pulse.setAttribute('r', 6);
+            pulse.setAttribute('class', 'user-dot-pulse');
+            pulse.setAttribute('data-lat', coords.lat);
+            pulse.setAttribute('data-lon', coords.lon);
+            userGroup.appendChild(pulse);
+
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', x);
+            dot.setAttribute('cy', y);
+            dot.setAttribute('r', 5);
+            dot.setAttribute('class', 'user-dot');
+            dot.setAttribute('data-lat', coords.lat);
+            dot.setAttribute('data-lon', coords.lon);
+            userGroup.appendChild(dot);
+        }
+
+        this.updateOutlineTransform();
+    },
+
+    // --- Selection and Highlighting ---
+    /**
+     * Find the nearest station to given lat/lon within snap distance.
+     * @param {number} lat
+     * @param {number} lon
+     * @returns {string|null} Station name or null if none within range
+     */
+    findNearestWithinSnap(lat, lon) {
+        if (!cachedStations) return null;
+        let nearest = null;
+        let minDist = this.config.snapDistance;
+
+        for (const [name, station] of Object.entries(cachedStations)) {
+            if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
+            const dist = haversineDistance(lat, lon, station.lat, station.lon);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = name;
+            }
+        }
+        return nearest;
+    },
+
+    /**
+     * Update prehighlight based on SVG coordinates.
+     * @param {number} svgX
+     * @param {number} svgY
+     * @returns {string|null} Nearest station name
+     */
+    updateHighlight(svgX, svgY) {
+        const { lat, lon } = this.svgToLatLon(svgX, svgY);
+        const nearest = this.findNearestWithinSnap(lat, lon);
+
+        if (nearest !== this.highlight) {
+            // Remove old highlight
+            document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
+                el.classList.remove('prehighlight');
+                el.setAttribute('r', 6);
+            });
+
+            // Add new highlight
+            if (nearest) {
+                const dot = document.querySelector(`.station-dot[data-station="${nearest}"]`);
+                if (dot) {
+                    dot.classList.add('prehighlight');
+                    dot.setAttribute('r', 10);
+                }
+            }
+            this.highlight = nearest;
+        }
+        return nearest;
+    },
+
+    /** Clear prehighlight state */
+    clearHighlight() {
         document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
             el.classList.remove('prehighlight');
             el.setAttribute('r', 6);
         });
+        this.highlight = null;
+    },
 
-        // Add new prehighlight (larger radius)
-        if (nearest) {
-            const dot = document.querySelector(`.station-dot[data-station="${nearest}"]`);
+    /** Clear tapped station state */
+    clearTapped() {
+        document.querySelectorAll('.station-dot.tapped').forEach(el => {
+            el.classList.remove('tapped');
+            el.setAttribute('r', 6);
+        });
+        this.tapped = null;
+        this.hideLabel();
+    },
+
+    /**
+     * Handle tap on a station (mobile two-tap selection).
+     * First tap highlights, second tap on same station selects.
+     * @param {string} stationName
+     */
+    handleTap(stationName) {
+        this.hideTooltip();
+        if (this.tapped === stationName) {
+            this.selectStation(stationName);
+        } else {
+            this.clearTapped();
+            this.tapped = stationName;
+            const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
             if (dot) {
-                dot.classList.add('prehighlight');
+                dot.classList.add('tapped');
                 dot.setAttribute('r', 10);
             }
+            this.showLabel(stationName);
         }
-
-        prehighlightedStation = nearest;
-    }
-
-    return nearest;
-}
-
-/** Convert mouse/touch event to SVG coordinates */
-function eventToSvgCoords(event) {
-    const svg = document.getElementById('station-map');
-    const rect = svg.getBoundingClientRect();
-    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
-
-    // ViewBox is fixed, so just map screen coords to SVG coords
-    const x = (clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
-    const y = (clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
-    return { x, y };
-}
-
-/** Reset map zoom to default */
-function resetMapZoom() {
-    mapZoom = { scale: 1, x: 0, y: 0 };
-}
-
-/** Pinch-to-zoom state */
-let pinchState = null;
-
-/** Pan/drag state */
-let panState = null;
-
-/** Tracks if a gesture (pinch/pan) occurred during current touch sequence */
-let gestureOccurred = false;
-
-/** Currently tapped station (for two-tap selection) */
-let tappedStation = null;
-
-/** Get distance between two touch points */
-function getTouchDistance(touches) {
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-}
-
-/** Get center point between two touches */
-function getTouchCenter(touches) {
-    return {
-        clientX: (touches[0].clientX + touches[1].clientX) / 2,
-        clientY: (touches[0].clientY + touches[1].clientY) / 2
-    };
-}
-
-/** Handle touch start for pinch zoom and pan */
-function onMapTouchStart(event) {
-    if (event.touches.length === 2) {
-        event.preventDefault();
-        // Cancel any pan in progress
-        panState = null;
-        pinchState = {
-            initialDistance: getTouchDistance(event.touches),
-            initialScale: mapZoom.scale,
-            initialX: mapZoom.x,
-            initialY: mapZoom.y,
-            initialCenter: getTouchCenter(event.touches)
-        };
-    } else if (event.touches.length === 1 && mapZoom.scale > 1) {
-        // Start pan when zoomed in
-        event.preventDefault();
-        const touch = event.touches[0];
-        panState = {
-            startX: touch.clientX,
-            startY: touch.clientY,
-            initialZoomX: mapZoom.x,
-            initialZoomY: mapZoom.y,
-            moved: false
-        };
-    }
-}
-
-/** Handle touch move for pinch zoom and pan */
-function onMapTouchMove(event) {
-    if (event.touches.length === 2 && pinchState) {
-        event.preventDefault();
-
-        const currentDistance = getTouchDistance(event.touches);
-        const scaleChange = currentDistance / pinchState.initialDistance;
-        const newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchState.initialScale * scaleChange));
-
-        // Get current pinch center
-        const center = getTouchCenter(event.touches);
-        const svg = document.getElementById('station-map');
-        const rect = svg.getBoundingClientRect();
-
-        // Calculate pan delta from initial pinch center
-        const centerDeltaX = (center.clientX - pinchState.initialCenter.clientX) / rect.width * MAP_CONFIG.viewBox.width;
-        const centerDeltaY = (center.clientY - pinchState.initialCenter.clientY) / rect.height * MAP_CONFIG.viewBox.height;
-
-        // Get initial pinch center in SVG coordinates
-        const initialCenterX = (pinchState.initialCenter.clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
-        const initialCenterY = (pinchState.initialCenter.clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
-
-        // Convert initial center to base coordinates
-        const baseCenterX = initialCenterX / pinchState.initialScale + pinchState.initialX;
-        const baseCenterY = initialCenterY / pinchState.initialScale + pinchState.initialY;
-
-        // Update scale
-        mapZoom.scale = newScale;
-
-        // Calculate new pan: keep base center at (new screen center)
-        // newScreenX = initialCenterX + centerDeltaX
-        // (baseCenterX - newPanX) * newScale = newScreenX
-        // newPanX = baseCenterX - newScreenX / newScale
-        const newScreenX = initialCenterX + centerDeltaX;
-        const newScreenY = initialCenterY + centerDeltaY;
-        mapZoom.x = baseCenterX - newScreenX / newScale;
-        mapZoom.y = baseCenterY - newScreenY / newScale;
-
-        // Clamp pan
-        clampMapPan();
-        updateCirclePositions();
-    } else if (event.touches.length === 1 && panState) {
-        event.preventDefault();
-
-        const touch = event.touches[0];
-        const svg = document.getElementById('station-map');
-        const rect = svg.getBoundingClientRect();
-
-        // Calculate movement in SVG base coordinates
-        const deltaX = (touch.clientX - panState.startX) / rect.width * MAP_CONFIG.viewBox.width / mapZoom.scale;
-        const deltaY = (touch.clientY - panState.startY) / rect.height * MAP_CONFIG.viewBox.height / mapZoom.scale;
-
-        // Check if this counts as a significant movement (for tap detection)
-        if (Math.abs(touch.clientX - panState.startX) > 10 || Math.abs(touch.clientY - panState.startY) > 10) {
-            panState.moved = true;
-        }
-
-        // Update pan (negative because dragging right should move view left)
-        mapZoom.x = panState.initialZoomX - deltaX;
-        mapZoom.y = panState.initialZoomY - deltaY;
-
-        // Clamp pan
-        clampMapPan();
-        updateCirclePositions();
-    }
-}
-
-/** Clamp map pan to keep content visible */
-function clampMapPan() {
-    const visibleWidth = MAP_CONFIG.viewBox.width / mapZoom.scale;
-    const visibleHeight = MAP_CONFIG.viewBox.height / mapZoom.scale;
-    mapZoom.x = Math.max(0, Math.min(mapZoom.x, MAP_CONFIG.viewBox.width - visibleWidth));
-    mapZoom.y = Math.max(0, Math.min(mapZoom.y, MAP_CONFIG.viewBox.height - visibleHeight));
-}
-
-/** Handle touch end for pinch zoom and pan */
-function onMapTouchEnd(event) {
-    // Track if a gesture occurred during this touch sequence
-    if (pinchState !== null || (panState !== null && panState.moved)) {
-        gestureOccurred = true;
-    }
-
-    if (event.touches.length < 2) {
-        pinchState = null;
-    }
-    if (event.touches.length === 0) {
-        panState = null;
-        // Return and reset gesture flag when all fingers lifted
-        const wasGesture = gestureOccurred;
-        gestureOccurred = false;
-        return wasGesture;
-    }
-
-    return true; // Still have fingers down, suppress tap
-}
-
-/** Handle mouse wheel zoom */
-function onMapWheel(event) {
-    event.preventDefault();
-
-    const zoomFactor = 1.05;
-    const oldScale = mapZoom.scale;
-    let newScale;
-
-    if (event.deltaY < 0) {
-        // Zoom in
-        newScale = Math.min(oldScale * zoomFactor, MAX_ZOOM);
-    } else {
-        // Zoom out
-        newScale = Math.max(oldScale / zoomFactor, MIN_ZOOM);
-    }
-
-    if (newScale === oldScale) return;
-
-    // Get mouse position in SVG coordinates (screen space)
-    const { x: mouseX, y: mouseY } = eventToSvgCoords(event);
-
-    // Convert mouse position to base (unzoomed) coordinates
-    const baseMouseX = mouseX / oldScale + mapZoom.x;
-    const baseMouseY = mouseY / oldScale + mapZoom.y;
-
-    // Update scale
-    mapZoom.scale = newScale;
-
-    // Adjust pan to keep the mouse position fixed on screen
-    // New screen position should equal old screen position:
-    // (baseMouseX - newPanX) * newScale = mouseX
-    // newPanX = baseMouseX - mouseX / newScale
-    mapZoom.x = baseMouseX - mouseX / newScale;
-    mapZoom.y = baseMouseY - mouseY / newScale;
-
-    // Calculate visible area in base coordinates
-    const visibleWidth = MAP_CONFIG.viewBox.width / newScale;
-    const visibleHeight = MAP_CONFIG.viewBox.height / newScale;
-
-    // Clamp pan to keep content visible
-    mapZoom.x = Math.max(0, Math.min(mapZoom.x, MAP_CONFIG.viewBox.width - visibleWidth));
-    mapZoom.y = Math.max(0, Math.min(mapZoom.y, MAP_CONFIG.viewBox.height - visibleHeight));
-
-    // Redraw at new positions
-    updateCirclePositions();
-}
-
-/** Tracks if a mouse drag just ended (to prevent modal close) */
-let mouseDragEnded = false;
-
-/** Handle mouse down on map (start drag when zoomed) */
-function onMapMouseDown(event) {
-    if (mapZoom.scale > 1) {
-        event.preventDefault();
-        panState = {
-            startX: event.clientX,
-            startY: event.clientY,
-            initialZoomX: mapZoom.x,
-            initialZoomY: mapZoom.y,
-            moved: false
-        };
-        // Listen for mouseup anywhere (in case mouse leaves the map while dragging)
-        document.addEventListener('mouseup', onDocumentMouseUp);
-    }
-}
-
-/** Handle mouse up anywhere (end drag) */
-function onDocumentMouseUp(event) {
-    if (panState && panState.moved) {
-        mouseDragEnded = true;
-        // Reset flag after a short delay (to catch the click event)
-        setTimeout(() => { mouseDragEnded = false; }, 0);
-    }
-    panState = null;
-    document.removeEventListener('mouseup', onDocumentMouseUp);
-}
-
-/** Handle mouse up on map (end drag) */
-function onMapMouseUp(event) {
-    // Handled by onDocumentMouseUp when dragging
-}
-
-/** Handle pointer move on map */
-function onMapPointerMove(event) {
-    // Handle dragging when zoomed
-    if (panState) {
-        const svg = document.getElementById('station-map');
-        const rect = svg.getBoundingClientRect();
-
-        const deltaX = (event.clientX - panState.startX) / rect.width * MAP_CONFIG.viewBox.width / mapZoom.scale;
-        const deltaY = (event.clientY - panState.startY) / rect.height * MAP_CONFIG.viewBox.height / mapZoom.scale;
-
-        if (Math.abs(event.clientX - panState.startX) > 5 || Math.abs(event.clientY - panState.startY) > 5) {
-            panState.moved = true;
-        }
-
-        mapZoom.x = panState.initialZoomX - deltaX;
-        mapZoom.y = panState.initialZoomY - deltaY;
-
-        clampMapPan();
-        updateCirclePositions();
-        hideMapTooltip();
-        return;
-    }
-
-    const { x, y } = eventToSvgCoords(event);
-    const nearest = updatePrehighlight(x, y);
-
-    // Update tooltip
-    if (nearest) {
-        showMapTooltipAt(event, nearest);
-    } else {
-        hideMapTooltip();
-    }
-}
-
-/** Handle click/tap on map */
-function onMapClick(event) {
-    // Don't select if we just finished dragging
-    if (mouseDragEnded) return;
-    // If we have a prehighlighted station, select it
-    if (prehighlightedStation) {
-        selectStationFromMap(prehighlightedStation);
-    }
-}
-
-/** Show tooltip near cursor/touch */
-function showMapTooltipAt(event, stationName) {
-    const tooltip = document.getElementById('map-tooltip');
-    const container = document.querySelector('.map-container');
-    const rect = container.getBoundingClientRect();
-    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
-
-    tooltip.textContent = stationName;
-    tooltip.hidden = false;
-
-    // Position tooltip near the cursor
-    const x = clientX - rect.left + 10;
-    const y = clientY - rect.top - 30;
-    tooltip.style.left = `${x}px`;
-    tooltip.style.top = `${y}px`;
-}
-
-/** Hide tooltip */
-function hideMapTooltip() {
-    document.getElementById('map-tooltip').hidden = true;
-}
-
-/** Clear prehighlight state */
-function clearPrehighlight() {
-    document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
-        el.classList.remove('prehighlight');
-        el.setAttribute('r', 6);
-    });
-    prehighlightedStation = null;
-}
-
-/** Clear tapped station state and hide label */
-function clearTappedStation() {
-    document.querySelectorAll('.station-dot.tapped').forEach(el => {
-        el.classList.remove('tapped');
-        el.setAttribute('r', 6);
-    });
-    tappedStation = null;
-    hideStationLabel();
-}
-
-/** Show station label above the station dot */
-function showStationLabel(stationName) {
-    const label = document.getElementById('station-label');
-    const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
-    if (!label || !dot) return;
-
-    const svg = document.getElementById('station-map');
-    const svgRect = svg.getBoundingClientRect();
-    const container = document.querySelector('.map-container');
-    const containerRect = container.getBoundingClientRect();
-
-    const cx = parseFloat(dot.getAttribute('cx'));
-    const cy = parseFloat(dot.getAttribute('cy'));
-
-    // Convert SVG coordinates to container coordinates
-    const x = (cx / MAP_CONFIG.viewBox.width) * svgRect.width + (svgRect.left - containerRect.left);
-    const y = (cy / MAP_CONFIG.viewBox.height) * svgRect.height + (svgRect.top - containerRect.top);
-
-    label.textContent = stationName;
-    label.hidden = false;
-    label.style.left = `${x}px`;
-    label.style.top = `${y - 35}px`;
-}
-
-/** Hide station label */
-function hideStationLabel() {
-    const label = document.getElementById('station-label');
-    if (label) label.hidden = true;
-}
-
-/** Handle tap on a station (two-tap selection) */
-function handleStationTap(stationName) {
-    hideMapTooltip(); // Don't show tooltip alongside station label
-    if (tappedStation === stationName) {
-        // Second tap on same station - select it
-        selectStationFromMap(stationName);
-    } else {
-        // First tap or tap on different station - highlight it
-        clearTappedStation();
-        tappedStation = stationName;
+    },
+
+    /** Select a station and close the map */
+    selectStation(stationName) {
+        if (this.isDragging()) return;
+        LocationPicker.select(stationName);
+        this.closeModal();
+    },
+
+    // --- UI Helpers ---
+    /**
+     * Show tooltip near the cursor/touch position.
+     * @param {MouseEvent|TouchEvent} event
+     * @param {string} stationName
+     */
+    showTooltip(event, stationName) {
+        const tooltip = document.getElementById('map-tooltip');
+        const container = document.querySelector('.map-container');
+        const rect = container.getBoundingClientRect();
+        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+        const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+        tooltip.textContent = stationName;
+        tooltip.hidden = false;
+        tooltip.style.left = `${clientX - rect.left + 10}px`;
+        tooltip.style.top = `${clientY - rect.top - 30}px`;
+    },
+
+    /** Hide tooltip */
+    hideTooltip() {
+        document.getElementById('map-tooltip').hidden = true;
+    },
+
+    /**
+     * Show station label above the station dot.
+     * @param {string} stationName
+     */
+    showLabel(stationName) {
+        const label = document.getElementById('station-label');
         const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
-        if (dot) {
-            dot.classList.add('tapped');
-            dot.setAttribute('r', 10);
-        }
-        showStationLabel(stationName);
-    }
-}
+        if (!label || !dot) return;
 
-/** Open map modal */
-function openMapModal() {
-    resetMapZoom();
-    renderMapStations();
-    document.getElementById('map-modal').hidden = false;
-}
+        const svg = document.getElementById('station-map');
+        const svgRect = svg.getBoundingClientRect();
+        const container = document.querySelector('.map-container');
+        const containerRect = container.getBoundingClientRect();
 
-/** Close map modal */
-function closeMapModal() {
-    document.getElementById('map-modal').hidden = true;
-    hideMapTooltip();
-    clearPrehighlight();
-    clearTappedStation();
-    resetMapZoom();
-}
+        const cx = parseFloat(dot.getAttribute('cx'));
+        const cy = parseFloat(dot.getAttribute('cy'));
 
-// Map modal event listeners
-document.getElementById('map-close').addEventListener('click', closeMapModal);
+        const x = (cx / this.config.viewBox.width) * svgRect.width + (svgRect.left - containerRect.left);
+        const y = (cy / this.config.viewBox.height) * svgRect.height + (svgRect.top - containerRect.top);
 
-// SVG map interaction
-// -----------------------------------------------------------------
-// Desktop: hover highlights nearest station + shows tooltip,
-//          single-click selects and closes map,
-//          scroll wheel to zoom, drag to pan when zoomed in
-// Mobile:  tap highlights station + shows label, second tap selects,
-//          pinch to zoom, drag to pan when zoomed in
-// -----------------------------------------------------------------
-const stationMap = document.getElementById('station-map');
-stationMap.addEventListener('mousedown', onMapMouseDown);
-stationMap.addEventListener('mouseup', onMapMouseUp);
-stationMap.addEventListener('mousemove', onMapPointerMove);
-stationMap.addEventListener('touchmove', (e) => {
-    // Handle pinch zoom or pan
-    if (e.touches.length === 2 || (e.touches.length === 1 && panState)) {
-        onMapTouchMove(e);
-        return;
-    }
-    // Single finger when not panning - just prevent default (no tooltip on touch)
-    e.preventDefault();
-}, { passive: false });
-stationMap.addEventListener('touchstart', onMapTouchStart, { passive: false });
-stationMap.addEventListener('touchend', (e) => {
-    const wasGesture = onMapTouchEnd(e);
-    // Handle tap if not a pinch/pan gesture
-    if (e.touches.length === 0 && !wasGesture) {
-        e.preventDefault();
-        // Find station at tap position (changedTouches has the lifted finger)
-        const touch = e.changedTouches[0];
-        if (touch) {
-            const svg = document.getElementById('station-map');
-            const rect = svg.getBoundingClientRect();
-            const x = (touch.clientX - rect.left) / rect.width * MAP_CONFIG.viewBox.width;
-            const y = (touch.clientY - rect.top) / rect.height * MAP_CONFIG.viewBox.height;
-            const { lat, lon } = svgToLatLon(x, y);
-            const tappedNear = findNearestStationWithinSnap(lat, lon);
+        label.textContent = stationName;
+        label.hidden = false;
+        label.style.left = `${x}px`;
+        label.style.top = `${y - 35}px`;
+    },
 
-            if (tappedNear) {
-                handleStationTap(tappedNear);
+    /** Hide station label */
+    hideLabel() {
+        const label = document.getElementById('station-label');
+        if (label) label.hidden = true;
+    },
+
+    /** Open the map modal */
+    openModal() {
+        this.resetZoom();
+        this.renderStations();
+        document.getElementById('map-modal').hidden = false;
+    },
+
+    /** Close the map modal */
+    closeModal() {
+        document.getElementById('map-modal').hidden = true;
+        this.hideTooltip();
+        this.clearHighlight();
+        this.clearTapped();
+        this.resetZoom();
+    },
+
+    // --- Mouse Input Handlers ---
+    mouse: {
+        onDown(event) {
+            const map = StationMap;
+            if (map.isZoomed()) {
+                event.preventDefault();
+                map.drag = {
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    initialX: map.zoom.x,
+                    initialY: map.zoom.y,
+                    moved: false
+                };
+                document.addEventListener('mouseup', map.mouse.onDocumentUp);
+            }
+        },
+
+        onDocumentUp(event) {
+            const map = StationMap;
+            document.removeEventListener('mouseup', map.mouse.onDocumentUp);
+            // IMPORTANT: Delay clearing drag state so click handlers can check isDragging().
+            // The click event fires synchronously after mouseup, before this callback runs.
+            // Without this delay, isDragging() would return false and clicks after drag
+            // would incorrectly select stations or close the modal.
+            setTimeout(() => { map.drag = null; }, 0);
+        },
+
+        onMove(event) {
+            const map = StationMap;
+
+            if (map.drag) {
+                const svg = document.getElementById('station-map');
+                const rect = svg.getBoundingClientRect();
+
+                const deltaX = (event.clientX - map.drag.startX) / rect.width * map.config.viewBox.width / map.zoom.scale;
+                const deltaY = (event.clientY - map.drag.startY) / rect.height * map.config.viewBox.height / map.zoom.scale;
+
+                if (Math.abs(event.clientX - map.drag.startX) > 5 || Math.abs(event.clientY - map.drag.startY) > 5) {
+                    map.drag.moved = true;
+                }
+
+                map.zoom.x = map.drag.initialX - deltaX;
+                map.zoom.y = map.drag.initialY - deltaY;
+
+                map.clampPan();
+                map.updatePositions();
+                map.hideTooltip();
+                return;
+            }
+
+            const { x, y } = map.eventToSvg(event);
+            const nearest = map.updateHighlight(x, y);
+
+            if (nearest) {
+                map.showTooltip(event, nearest);
             } else {
-                // Tapped on empty area - clear tapped station
-                clearTappedStation();
+                map.hideTooltip();
+            }
+        },
+
+        onClick(event) {
+            const map = StationMap;
+            if (map.isDragging()) return;
+            if (map.highlight) {
+                map.selectStation(map.highlight);
+            }
+        },
+
+        onLeave() {
+            const map = StationMap;
+            map.clearHighlight();
+            map.hideTooltip();
+        },
+
+        onWheel(event) {
+            event.preventDefault();
+            const map = StationMap;
+
+            const zoomFactor = 1.05;
+            const direction = event.deltaY < 0 ? 1 : -1;
+            const newScale = direction > 0
+                ? map.zoom.scale * zoomFactor
+                : map.zoom.scale / zoomFactor;
+
+            const { x, y } = map.eventToSvg(event);
+            map.zoomTo(newScale, x, y);
+        }
+    },
+
+    // --- Touch Input Handlers ---
+    touch: {
+        /** Get distance between two touch points */
+        getDistance(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        },
+
+        /** Get center point between two touches */
+        getCenter(touches) {
+            return {
+                clientX: (touches[0].clientX + touches[1].clientX) / 2,
+                clientY: (touches[0].clientY + touches[1].clientY) / 2
+            };
+        },
+
+        onStart(event) {
+            const map = StationMap;
+
+            if (event.touches.length === 2) {
+                event.preventDefault();
+                map.drag = null; // Cancel any pan in progress
+                map.pinch = {
+                    initialDistance: this.getDistance(event.touches),
+                    initialScale: map.zoom.scale,
+                    initialX: map.zoom.x,
+                    initialY: map.zoom.y,
+                    initialCenter: this.getCenter(event.touches)
+                };
+            } else if (event.touches.length === 1 && map.isZoomed()) {
+                event.preventDefault();
+                const touch = event.touches[0];
+                map.drag = {
+                    startX: touch.clientX,
+                    startY: touch.clientY,
+                    initialX: map.zoom.x,
+                    initialY: map.zoom.y,
+                    moved: false
+                };
+            }
+        },
+
+        onMove(event) {
+            const map = StationMap;
+
+            if (event.touches.length === 2 && map.pinch) {
+                event.preventDefault();
+
+                const currentDistance = this.getDistance(event.touches);
+                const scaleChange = currentDistance / map.pinch.initialDistance;
+                const newScale = Math.max(map.config.minZoom,
+                    Math.min(map.config.maxZoom, map.pinch.initialScale * scaleChange));
+
+                const center = this.getCenter(event.touches);
+                const svg = document.getElementById('station-map');
+                const rect = svg.getBoundingClientRect();
+
+                const centerDeltaX = (center.clientX - map.pinch.initialCenter.clientX) / rect.width * map.config.viewBox.width;
+                const centerDeltaY = (center.clientY - map.pinch.initialCenter.clientY) / rect.height * map.config.viewBox.height;
+
+                const initialCenterX = (map.pinch.initialCenter.clientX - rect.left) / rect.width * map.config.viewBox.width;
+                const initialCenterY = (map.pinch.initialCenter.clientY - rect.top) / rect.height * map.config.viewBox.height;
+
+                const baseCenterX = initialCenterX / map.pinch.initialScale + map.pinch.initialX;
+                const baseCenterY = initialCenterY / map.pinch.initialScale + map.pinch.initialY;
+
+                map.zoom.scale = newScale;
+
+                const newScreenX = initialCenterX + centerDeltaX;
+                const newScreenY = initialCenterY + centerDeltaY;
+                map.zoom.x = baseCenterX - newScreenX / newScale;
+                map.zoom.y = baseCenterY - newScreenY / newScale;
+
+                map.clampPan();
+                map.updatePositions();
+            } else if (event.touches.length === 1 && map.drag) {
+                event.preventDefault();
+
+                const touch = event.touches[0];
+                const svg = document.getElementById('station-map');
+                const rect = svg.getBoundingClientRect();
+
+                const deltaX = (touch.clientX - map.drag.startX) / rect.width * map.config.viewBox.width / map.zoom.scale;
+                const deltaY = (touch.clientY - map.drag.startY) / rect.height * map.config.viewBox.height / map.zoom.scale;
+
+                if (Math.abs(touch.clientX - map.drag.startX) > 10 || Math.abs(touch.clientY - map.drag.startY) > 10) {
+                    map.drag.moved = true;
+                }
+
+                map.zoom.x = map.drag.initialX - deltaX;
+                map.zoom.y = map.drag.initialY - deltaY;
+
+                map.clampPan();
+                map.updatePositions();
+            }
+        },
+
+        onEnd(event) {
+            const map = StationMap;
+
+            // Track if a gesture occurred
+            if (map.isPinching() || map.isDragging()) {
+                map.gestureOccurred = true;
+            }
+
+            if (event.touches.length < 2) {
+                map.pinch = null;
+            }
+            if (event.touches.length === 0) {
+                map.drag = null;
+                const wasGesture = map.gestureOccurred;
+                map.gestureOccurred = false;
+
+                // Handle tap if not a gesture
+                if (!wasGesture) {
+                    event.preventDefault();
+                    const touch = event.changedTouches[0];
+                    if (touch) {
+                        const svg = document.getElementById('station-map');
+                        const rect = svg.getBoundingClientRect();
+                        const x = (touch.clientX - rect.left) / rect.width * map.config.viewBox.width;
+                        const y = (touch.clientY - rect.top) / rect.height * map.config.viewBox.height;
+                        const { lat, lon } = map.svgToLatLon(x, y);
+                        const tappedNear = map.findNearestWithinSnap(lat, lon);
+
+                        if (tappedNear) {
+                            map.handleTap(tappedNear);
+                        } else {
+                            map.clearTapped();
+                        }
+                    }
+                }
             }
         }
+    },
+
+    // --- Initialization ---
+    init() {
+        const svg = document.getElementById('station-map');
+        const modal = document.getElementById('map-modal');
+        const closeBtn = document.getElementById('map-close');
+        const self = this;
+
+        // Mouse events
+        svg.addEventListener('mousedown', (e) => self.mouse.onDown(e));
+        svg.addEventListener('mousemove', (e) => self.mouse.onMove(e));
+        svg.addEventListener('click', (e) => self.mouse.onClick(e));
+        svg.addEventListener('mouseleave', () => self.mouse.onLeave());
+        svg.addEventListener('wheel', (e) => self.mouse.onWheel(e), { passive: false });
+
+        // Touch events
+        svg.addEventListener('touchstart', (e) => self.touch.onStart(e), { passive: false });
+        svg.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 || (e.touches.length === 1 && self.drag)) {
+                self.touch.onMove(e);
+            } else {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        svg.addEventListener('touchend', (e) => self.touch.onEnd(e));
+
+        // Modal events
+        closeBtn.addEventListener('click', () => self.closeModal());
+        modal.addEventListener('click', (e) => {
+            if (self.isDragging()) return;
+            if (e.target.id === 'map-modal') self.closeModal();
+        });
+
+        // Keyboard
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.hidden) {
+                self.closeModal();
+            }
+        });
     }
-});
-stationMap.addEventListener('click', onMapClick);
-stationMap.addEventListener('mouseleave', () => {
-    // Note: drag continues even if mouse leaves map (handled by document mouseup)
-    clearPrehighlight();
-    hideMapTooltip();
-});
-stationMap.addEventListener('wheel', onMapWheel, { passive: false });
-document.getElementById('map-modal').addEventListener('click', (e) => {
-    // Don't close if we just finished dragging the map
-    if (mouseDragEnded) return;
-    if (e.target.id === 'map-modal') closeMapModal();
-});
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !document.getElementById('map-modal').hidden) {
-        closeMapModal();
-    }
-});
+};
+
+// Initialize the map
+StationMap.init();
