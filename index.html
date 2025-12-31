@@ -26,6 +26,12 @@
             <button class="retry-btn" onclick="location.reload()">Pokušaj ponovo</button>
         </div>
 
+        <!-- Loading/status state (hidden by default) -->
+        <div class="status" id="status" hidden>
+            <p id="status-message"></p>
+            <button class="cancel-btn" id="status-cancel">Odustani</button>
+        </div>
+
         <!-- Weather display (hidden until data loads) -->
         <div id="weather" hidden>
             <div class="header">

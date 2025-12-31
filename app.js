@@ -58,6 +58,24 @@ let cachedStations = null;
 /** Cached user coordinates from geolocation */
 let userCoords = null;
 
+/**
+ * Geolocation status: 'unknown' | 'granted' | 'denied' | 'unavailable'
+ *
+ * Flow when user selects "Najbliže" (nearest station):
+ * 1. If userCoords available → show weather for nearest station
+ * 2. If userCoords not available:
+ *    - geoStatus 'unknown' → show "Tražim lokaciju..." with cancel button
+ *      - Cancel opens dropdown for manual station selection
+ *      - Re-selecting "Najbliže" retries geolocation (resets geoStatus to 'unknown')
+ *    - geoStatus 'denied' → show error with instructions to enable in device settings
+ *    - geoStatus 'unavailable' → show error suggesting manual selection
+ * 3. When geolocation resolves:
+ *    - Success → set geoStatus='granted', cache userCoords, render weather
+ *    - Permission denied (code 1) → set geoStatus='denied', show error
+ *    - Other failure (timeout, etc.) → set geoStatus='unavailable', show error
+ */
+let geoStatus = 'unknown';
+
 /** Refresh interval in milliseconds (15 minutes) */
 const REFRESH_INTERVAL = 15 * 60 * 1000;
 
@@ -289,11 +307,14 @@ function setSelectedLocation(location) {
 function requestGeolocation() {
     if (!('geolocation' in navigator)) {
         console.log('[DHMZ] Geolocation not available');
+        geoStatus = 'unavailable';
+        updateDetectedDropdownOption();
         return;
     }
 
     navigator.geolocation.getCurrentPosition(
         (position) => {
+            geoStatus = 'granted';
             userCoords = {
                 lat: position.coords.latitude,
                 lon: position.coords.longitude
@@ -313,7 +334,15 @@ function requestGeolocation() {
             }
         },
         (error) => {
-            console.log('[DHMZ] Geolocation denied or failed:', error.message);
+            console.log('[DHMZ] Geolocation denied or failed:', error.message, 'code:', error.code);
+            // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
+            geoStatus = error.code === 1 ? 'denied' : 'unavailable';
+            updateDetectedDropdownOption();
+
+            // If "Najbliže" is currently selected and we can't get location, render a message
+            if (getSelectedLocation() === DETECTED_LOCATION) {
+                renderSelectedStation();
+            }
         },
         { timeout: 10000, maximumAge: 300000 }
     );
@@ -377,6 +406,8 @@ function getDropdownLabel(location) {
             const nearest = findNearestStation(cachedStations, userCoords.lat, userCoords.lon);
             if (nearest) return `Najbliže (${nearest.name})`;
         }
+        if (geoStatus === 'denied') return 'Najbliže (lokacija onemogućena)';
+        if (geoStatus === 'unavailable') return 'Najbliže (lokacija nedostupna)';
         return 'Najbliže';
     }
     return location;
@@ -396,6 +427,15 @@ function onLocationSelect(value) {
     setSelectedLocation(value);
     closeLocationDropdown();
     updateDropdownSelection(value);
+
+    // If selecting "Najbliže" without coords, retry geolocation
+    // (user may have just enabled permissions in settings)
+    if (value === DETECTED_LOCATION && !userCoords) {
+        geoStatus = 'unknown'; // Reset so we don't flash the error
+        updateDetectedDropdownOption();
+        requestGeolocation();
+    }
+
     renderSelectedStation();
 }
 
@@ -420,6 +460,12 @@ function updateDropdownSelection(value) {
 // Set up dropdown toggle
 document.getElementById('location-trigger').addEventListener('click', (e) => {
     e.stopPropagation();
+    toggleLocationDropdown();
+});
+
+// Cancel button opens dropdown so user can pick a station
+document.getElementById('status-cancel').addEventListener('click', () => {
+    hide('status');
     toggleLocationDropdown();
 });
 
@@ -506,15 +552,25 @@ function renderSelectedStation() {
 
     const stationNames = Object.keys(cachedStations);
     if (stationNames.length === 0) {
-        renderError('Nema podataka o postajama');
+        renderError('Nema podataka o stanicama');
         return;
     }
 
     let selectedLocation = getSelectedLocation();
     let result = getStationForLocation(cachedStations, selectedLocation);
 
-    // If DETECTED_LOCATION selected but no coords yet, wait for geolocation
+    // If DETECTED_LOCATION selected but no coords yet
     if (!result && selectedLocation === DETECTED_LOCATION) {
+        if (geoStatus === 'denied') {
+            renderError('Lokacija je onemogućena. Omogućite lokaciju u postavkama uređaja ili izaberite stanicu ručno.');
+            return;
+        }
+        if (geoStatus === 'unavailable') {
+            renderError('Lokacija nije dostupna. Izaberite stanicu ručno.');
+            return;
+        }
+        // Still waiting for geolocation - show feedback
+        renderStatus('Tražim lokaciju...');
         return;
     }
 
@@ -560,6 +616,7 @@ const DISTANCE_WARNING_THRESHOLD = 20;
  */
 function render(station, distance) {
     hide('error');
+    hide('status');
 
     // Reset optional containers
     document.getElementById('humidity-container').classList.add('empty');
@@ -621,8 +678,20 @@ function render(station, distance) {
  */
 function renderError(message) {
     hide('weather');
+    hide('status');
     setText('error-message', message);
     show('error');
+}
+
+/**
+ * Renders a status/loading message to the widget.
+ * @param {string} message
+ */
+function renderStatus(message) {
+    hide('weather');
+    hide('error');
+    setText('status-message', message);
+    show('status');
 }
 
 /**
