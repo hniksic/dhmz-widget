@@ -1,7 +1,7 @@
 {
-  "name": "DHMZ Vrijeme",
+  "name": "Pljusak Vrijeme",
   "short_name": "Vrijeme",
-  "description": "Trenutno vrijeme u Hrvatskoj (DHMZ)",
+  "description": "Trenutno vrijeme u Hrvatskoj (pljusak.com)",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
