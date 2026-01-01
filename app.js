@@ -47,7 +47,7 @@ const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
 const PROXY_URL = 'https://corsproxy.io/?';
 
 /** Special location that uses geolocation to find nearest station */
-const DETECTED_LOCATION = 'Najbliža';
+const NEAREST_LOCATION = 'Najbliža';
 
 /**
  * City prefixes for stations that should display as "City" in title
@@ -124,13 +124,13 @@ const Geolocation = {
 
                 // On first visit, auto-select "Najbliža"
                 if (!hasSelectedLocation()) {
-                    setSelectedLocation(DETECTED_LOCATION);
+                    setSelectedLocation(NEAREST_LOCATION);
                 }
 
                 // Update dropdown and re-render if "Najbliža" is selected
                 LocationPicker.updateDetectedLabel();
-                if (getSelectedLocation() === DETECTED_LOCATION) {
-                    LocationPicker.updateSelection(DETECTED_LOCATION);
+                if (getSelectedLocation() === NEAREST_LOCATION) {
+                    LocationPicker.updateSelection(NEAREST_LOCATION);
                     renderSelectedStation();
                 }
             },
@@ -142,7 +142,7 @@ const Geolocation = {
 
                 // If "Najbliža" is currently selected and we can't get location, render error
                 // (unless user cancelled and is manually selecting a station)
-                if (getSelectedLocation() === DETECTED_LOCATION && !self.cancelledByUser) {
+                if (getSelectedLocation() === NEAREST_LOCATION && !self.cancelledByUser) {
                     renderSelectedStation();
                 }
             },
@@ -344,7 +344,7 @@ function extractAllStations(xmlDoc, measurementTime) {
  * @returns {{station: StationData, distance: number|null}|null}
  */
 function getStationForLocation(allStations, location) {
-    if (location === DETECTED_LOCATION) {
+    if (location === NEAREST_LOCATION) {
         // Use geolocation to find nearest station
         if (Geolocation.hasCoords()) {
             const nearest = findNearestStation(allStations, Geolocation.coords.lat, Geolocation.coords.lon);
@@ -405,7 +405,7 @@ function hasSelectedLocation() {
 
 /** Get selected location from localStorage */
 function getSelectedLocation() {
-    return localStorage.getItem(LOCATION_KEY) || DETECTED_LOCATION;
+    return localStorage.getItem(LOCATION_KEY) || NEAREST_LOCATION;
 }
 
 /** Save selected location to localStorage */
@@ -479,11 +479,11 @@ const LocationPicker = {
 
         // Add "Najbliža" first
         const nearestOpt = document.createElement('div');
-        nearestOpt.className = 'location-option' + (DETECTED_LOCATION === currentValue ? ' selected' : '');
+        nearestOpt.className = 'location-option' + (NEAREST_LOCATION === currentValue ? ' selected' : '');
         nearestOpt.setAttribute('role', 'option');
-        nearestOpt.dataset.value = DETECTED_LOCATION;
-        nearestOpt.textContent = this.getLabel(DETECTED_LOCATION);
-        nearestOpt.addEventListener('click', () => self.select(DETECTED_LOCATION));
+        nearestOpt.dataset.value = NEAREST_LOCATION;
+        nearestOpt.textContent = this.getLabel(NEAREST_LOCATION);
+        nearestOpt.addEventListener('click', () => self.select(NEAREST_LOCATION));
         dropdown.appendChild(nearestOpt);
 
         // Add "Show map" option second
@@ -516,23 +516,23 @@ const LocationPicker = {
      * @returns {string}
      */
     getLabel(location) {
-        if (location === DETECTED_LOCATION) {
+        if (location === NEAREST_LOCATION) {
             if (Geolocation.hasCoords() && cachedStations) {
                 const nearest = findNearestStation(cachedStations, Geolocation.coords.lat, Geolocation.coords.lon);
-                if (nearest) return `${DETECTED_LOCATION} (${nearest.name})`;
+                if (nearest) return `${NEAREST_LOCATION} (${nearest.name})`;
             }
-            if (Geolocation.status === 'denied') return `${DETECTED_LOCATION} (lokacija onemogućena)`;
-            if (Geolocation.status === 'unavailable') return `${DETECTED_LOCATION} (lokacija nedostupna)`;
-            return DETECTED_LOCATION;
+            if (Geolocation.status === 'denied') return `${NEAREST_LOCATION} (lokacija onemogućena)`;
+            if (Geolocation.status === 'unavailable') return `${NEAREST_LOCATION} (lokacija nedostupna)`;
+            return NEAREST_LOCATION;
         }
         return location;
     },
 
     /** Update the "Najbliža" option text after geolocation resolves */
     updateDetectedLabel() {
-        const opt = this.getDropdown().querySelector(`[data-value="${DETECTED_LOCATION}"]`);
+        const opt = this.getDropdown().querySelector(`[data-value="${NEAREST_LOCATION}"]`);
         if (opt) {
-            opt.textContent = this.getLabel(DETECTED_LOCATION);
+            opt.textContent = this.getLabel(NEAREST_LOCATION);
         }
     },
 
@@ -545,7 +545,7 @@ const LocationPicker = {
 
     /**
      * Handle option selection.
-     * @param {string} value - Station name or DETECTED_LOCATION
+     * @param {string} value - Station name or NEAREST_LOCATION
      */
     select(value) {
         setSelectedLocation(value);
@@ -554,7 +554,7 @@ const LocationPicker = {
 
         // If selecting "Najbliža" without coords, retry geolocation
         // (user may have just enabled permissions in settings)
-        if (value === DETECTED_LOCATION && !Geolocation.hasCoords()) {
+        if (value === NEAREST_LOCATION && !Geolocation.hasCoords()) {
             Geolocation.retry();
         }
 
@@ -679,8 +679,8 @@ function renderSelectedStation() {
     let selectedLocation = getSelectedLocation();
     let result = getStationForLocation(cachedStations, selectedLocation);
 
-    // If DETECTED_LOCATION selected but no coords yet
-    if (!result && selectedLocation === DETECTED_LOCATION) {
+    // If NEAREST_LOCATION selected but no coords yet
+    if (!result && selectedLocation === NEAREST_LOCATION) {
         if (Geolocation.status === 'denied') {
             renderError('Lokacija je onemogućena. Omogućite lokaciju u postavkama uređaja ili izaberite stanicu ručno.');
             return;
@@ -694,14 +694,19 @@ function renderSelectedStation() {
         return;
     }
 
-    // Fall back to DETECTED_LOCATION if selected station no longer exists
+    // Fall back to NEAREST_LOCATION if selected station no longer exists
     if (!result) {
-        console.warn('[DHMZ] Station not found, falling back to detected:', selectedLocation);
-        selectedLocation = DETECTED_LOCATION;
+        const notFoundStation = selectedLocation;
+        selectedLocation = NEAREST_LOCATION;
         setSelectedLocation(selectedLocation);
         LocationPicker.updateSelection(selectedLocation);
         // If still no station (no coords), just return and wait
         result = getStationForLocation(cachedStations, selectedLocation);
+        if (result) {
+            console.warn(`[DHMZ] Station "${notFoundStation}" not found, falling back to nearest (${result.station.name})`);
+        } else {
+            console.warn(`[DHMZ] Station "${notFoundStation}" not found, cannot determine nearest (no location)`);
+        }
         if (!result) return;
     }
 
@@ -1141,7 +1146,7 @@ const StationMap = {
 
         const selectedLocation = getSelectedLocation();
         const coords = Geolocation.coords;
-        const selectedStation = selectedLocation === DETECTED_LOCATION
+        const selectedStation = selectedLocation === NEAREST_LOCATION
             ? (coords ? findNearestStation(cachedStations, coords.lat, coords.lon)?.name : null)
             : selectedLocation;
 
