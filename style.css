@@ -110,6 +110,37 @@ body {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
+/* Larger map on big screens */
+@media (min-width: 768px) {
+    .map-modal {
+        padding: 40px;
+    }
+
+    .map-container {
+        /* Size to fit viewport while maintaining aspect ratio */
+        max-width: min(calc(100vw - 80px), calc((100vh - 80px) * 519 / 476));
+        max-height: min(calc(100vh - 80px), calc((100vw - 80px) * 476 / 519));
+    }
+
+    /* Smaller circles on large screens (they scale with viewBox) */
+    .station-dot {
+        r: 3;
+    }
+
+    .station-dot.prehighlight,
+    .station-dot.tapped {
+        r: 5;
+    }
+
+    .user-dot {
+        r: 3;
+    }
+
+    .user-dot-pulse {
+        r: 3;
+    }
+}
+
 .map-close {
     position: absolute;
     top: 12px;
