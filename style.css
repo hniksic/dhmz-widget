@@ -459,6 +459,44 @@ body {
     color: rgba(255, 255, 255, 0.8);
 }
 
+/* Toast notification */
+.toast {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: rgba(30, 30, 50, 0.95);
+    color: rgba(255, 200, 100, 0.9);
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    border: 1px solid rgba(255, 200, 100, 0.3);
+    z-index: 50;
+}
+
+.toast[hidden] {
+    display: none;
+}
+
+.toast-dismiss {
+    background: none;
+    border: none;
+    color: rgba(255, 200, 100, 0.5);
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.toast-dismiss:hover {
+    color: rgba(255, 200, 100, 0.9);
+}
+
 /* Responsive adjustments */
 @media (max-width: 360px) {
     .widget {

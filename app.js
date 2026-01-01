@@ -189,10 +189,24 @@ const TYPEAHEAD_TIMEOUT_MS = 2000;
  * @property {Date|null} measurementTime - When the measurement was taken
  */
 
+/** Whether a fetch is currently in progress (prevents concurrent fetches) */
+let fetchInProgress = false;
+
+/** Timestamp of last fetch start (for throttling auto-refresh) */
+let lastRefresh = 0;
+
 /**
  * Fetches weather data from DHMZ via CORS proxy and updates the display.
  */
 async function fetchWeatherData() {
+    // Prevent concurrent fetches (e.g., click + focus firing together)
+    if (fetchInProgress) {
+        console.log('[DHMZ] Fetch already in progress, skipping');
+        return;
+    }
+    fetchInProgress = true;
+    lastRefresh = Date.now();
+
     const cacheBuster = `?_=${Date.now()}`;
     const fetchUrl = PROXY_URL + encodeURIComponent(DHMZ_XML_URL + cacheBuster);
     const widget = document.getElementById('widget');
@@ -233,19 +247,24 @@ async function fetchWeatherData() {
         const stationNames = Object.keys(cachedStations).sort(collator.compare);
         console.log('[DHMZ] Found stations:', stationNames.join(', ') || 'none');
 
+        // Clear any previous error toast on successful fetch
+        hideToast();
+
         LocationPicker.populate(stationNames);
         Geolocation.request();
         renderSelectedStation();
 
     } catch (error) {
         console.error('[DHMZ] Error:', error);
-        // If we have cached data, keep showing it instead of an error
+        // If we have cached data, show toast and keep displaying old data
         if (cachedStations) {
             console.log('[DHMZ] Using cached data due to fetch error');
+            showToast('Učitavanje nije uspjelo');
         } else {
             renderError('Greška: ' + error.message);
         }
     } finally {
+        fetchInProgress = false;
         widget.classList.remove('refreshing');
     }
 }
@@ -715,6 +734,33 @@ function show(id) { document.getElementById(id).hidden = false; }
 function hide(id) { document.getElementById(id).hidden = true; }
 function setText(id, text) { document.getElementById(id).textContent = text; }
 
+/** Timer for auto-hiding toast */
+let toastTimeout = null;
+
+/**
+ * Shows a toast notification with the given message.
+ * Auto-hides after 5 seconds, or can be manually dismissed.
+ * @param {string} message
+ */
+function showToast(message) {
+    // Clear any existing timeout
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+    }
+    setText('toast-message', message);
+    show('toast');
+    toastTimeout = setTimeout(hideToast, 5000);
+}
+
+/** Hides the toast notification */
+function hideToast() {
+    hide('toast');
+    if (toastTimeout) {
+        clearTimeout(toastTimeout);
+        toastTimeout = null;
+    }
+}
+
 /**
  * Parses station name into display components.
  * For city stations (e.g., "Zagreb-Grič"), returns city as title and location as subtitle.
@@ -866,12 +912,9 @@ fetchWeatherData();
 setInterval(fetchWeatherData, REFRESH_INTERVAL);
 
 // Auto-refresh when returning to the app (mobile PWA)
-// Multiple events for reliability; throttled because they can fire together
-let lastRefresh = 0;
+// Multiple events for reliability; throttled via lastRefresh set by fetchWeatherData
 function refreshIfStale() {
-    const now = Date.now();
-    if (now - lastRefresh > 5000) {
-        lastRefresh = now;
+    if (Date.now() - lastRefresh > 5000) {
         fetchWeatherData();
         return true;
     }
@@ -890,6 +933,9 @@ if ('serviceWorker' in navigator) {
 
 // Tap on conditions to refresh (always fetches, no throttle)
 document.getElementById('condition-container').addEventListener('click', fetchWeatherData);
+
+// Toast dismiss button
+document.getElementById('toast-dismiss').addEventListener('click', hideToast);
 
 // --- Station Map ---
 
