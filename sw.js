@@ -18,7 +18,7 @@
  * - Bump version whenever deploying changes to cached files
  */
 
-const CACHE_NAME = 'zagreb-temp-v53';
+const CACHE_NAME = 'zagreb-temp-v54';
 
 const ASSETS = [
   './',
@@ -70,7 +70,7 @@ self.addEventListener('fetch', event => {
   const url = event.request.url;
 
   // Weather API: always fetch from network, never cache
-  if (url.includes('corsproxy') || url.includes('allorigins') || url.includes('vrijeme.hr')) {
+  if (url.includes('corsproxy') || url.includes('allorigins') || url.includes('vrijeme.hr') || url.includes('pljusak.com')) {
     event.respondWith(fetch(event.request));
     return;
   }

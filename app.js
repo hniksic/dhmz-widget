@@ -1,71 +1,67 @@
 /**
- * DHMZ Weather Widget
+ * Weather Widget
  *
- * Fetches current weather data from DHMZ (Croatian Meteorological Service)
- * and displays temperature for any station in Croatia.
- * Supports geolocation to auto-select the nearest station.
+ * Fetches current weather data from either:
+ * - DHMZ (Croatian Meteorological Service) - official stations
+ * - pljusak.com - amateur weather station network
+ *
+ * Use ?source=pljusak URL parameter to switch to pljusak.com data.
+ * Default is DHMZ.
  */
 
-/*
- * VRIJEME.HR XML STRUCTURE (https://vrijeme.hr/hrvatska1_n.xml)
- * =============================================================
- *
- * The XML contains current weather observations for stations across Croatia,
- * organized by region. Data is typically updated hourly.
- *
- * Expected structure:
- *
- * <?xml version="1.0" encoding="UTF-8"?>
- * <Hrvatska>
- *   <DatumTermin>
- *     <Datum>DD.MM.YYYY</Datum>    <!-- Measurement date -->
- *     <Termin>HH</Termin>          <!-- Hour (0-23) -->
- *   </DatumTermin>
- *   <Grad autom="0|1">             <!-- autom: 0=manual, 1=automatic station -->
- *     <GradIme>Station Name</GradIme>
- *     <Lat>XX.XXX</Lat>              <!-- Latitude (42-47°N), may have leading spaces -->
- *     <Lon>XX.XXX</Lon>              <!-- Longitude (13-19°E), may have leading spaces -->
- *     <Podatci>
- *       <Temp>XX.X</Temp>          <!-- Temperature in °C, may have leading spaces -->
- *       <Vlaga>XX</Vlaga>          <!-- Relative humidity %, or "-" if unavailable -->
- *       <Tlak>XXXX.X</Tlak>        <!-- Pressure in hPa, may have "*" suffix -->
- *       <TlakTend>+X.X</TlakTend>  <!-- Pressure tendency -->
- *       <VjetarSmjer>XX</VjetarSmjer>  <!-- Wind direction (N, NE, E, SE, S, SW, W, NW, C) -->
- *       <VjetarBrzina>X.X</VjetarBrzina>  <!-- Wind speed in m/s -->
- *       <Vrijeme>description</Vrijeme>    <!-- Weather description in Croatian -->
- *       <VrijemeZnak>X</VrijemeZnak>      <!-- Weather symbol code -->
- *     </Podatci>
- *   </Grad>
- *   <!-- More <Grad> elements... -->
- * </Hrvatska>
+// =============================================================================
+// DATA SOURCE CONFIGURATION
+// =============================================================================
+
+/**
+ * Detect data source from URL parameter.
+ * Usage: ?source=pljusak or ?source=dhmz (default)
  */
+const DATA_SOURCE = new URLSearchParams(window.location.search).get('source') === 'pljusak'
+    ? 'pljusak'
+    : 'dhmz';
 
-/** DHMZ XML endpoint for current weather data (by region) */
-const DHMZ_XML_URL = 'https://vrijeme.hr/hrvatska1_n.xml';
+/**
+ * Data source configurations
+ */
+const DATA_SOURCES = {
+    dhmz: {
+        url: 'https://vrijeme.hr/hrvatska1_n.xml',
+        locationKey: 'dhmz-location',
+        // Station name uses hyphen separator (e.g., "Zagreb-Grič")
+        nameSeparator: '-',
+        // Only split these city prefixes (others like "Bilogora-Bjelovar" stay as-is)
+        cityPrefixes: [
+            'Dubrovnik',
+            'Osijek',
+            'Pula',
+            'Rijeka',
+            'Split',
+            'Zadar',
+            'Zagreb',
+        ],
+    },
+    pljusak: {
+        url: 'https://pljusak.com/karta.php',
+        locationKey: 'pljusak-location',
+        // Station name uses comma separator (e.g., "Zagreb, Podsused")
+        nameSeparator: ', ',
+        // null = always split on separator (all pljusak names with comma are "City, Location")
+        cityPrefixes: null,
+    }
+};
 
-/** CORS proxy (vrijeme.hr doesn't send CORS headers) */
+/** Current source configuration */
+const SOURCE_CONFIG = DATA_SOURCES[DATA_SOURCE];
+
+/** CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers) */
 const PROXY_URL = 'https://corsproxy.io/?';
 
 /** Special location that uses geolocation to find nearest station */
 const NEAREST_LOCATION = 'Najbliža';
 
-/**
- * City prefixes for stations that should display as "City" in title
- * with sub-location (e.g., "Grič", "aerodrom") shown next to the time.
- * Pattern: "City-Location" where City is in this list.
- */
-const CITY_STATION_PREFIXES = [
-    'Dubrovnik',
-    'Osijek',
-    'Pula',
-    'Rijeka',
-    'Split',
-    'Zadar',
-    'Zagreb',
-];
-
-/** LocalStorage key for selected location */
-const LOCATION_KEY = 'dhmz-location';
+/** LocalStorage key for selected location (source-specific) */
+const LOCATION_KEY = SOURCE_CONFIG.locationKey;
 
 /** Cached station data from last fetch */
 let cachedStations = null;
@@ -106,7 +102,7 @@ const Geolocation = {
      */
     request() {
         if (!('geolocation' in navigator)) {
-            console.log('[DHMZ] Geolocation not available');
+            console.log('[vrijeme] Geolocation not available');
             this.status = 'unavailable';
             LocationPicker.updateDetectedLabel();
             return;
@@ -120,7 +116,7 @@ const Geolocation = {
                     lat: position.coords.latitude,
                     lon: position.coords.longitude
                 };
-                console.log('[DHMZ] User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
+                console.log('[vrijeme] User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
 
                 // On first visit, auto-select "Najbliža"
                 if (!hasSelectedLocation()) {
@@ -135,7 +131,7 @@ const Geolocation = {
                 }
             },
             (error) => {
-                console.log('[DHMZ] Geolocation denied or failed:', error.message, 'code:', error.code);
+                console.log('[vrijeme] Geolocation denied or failed:', error.message, 'code:', error.code);
                 // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
                 self.status = error.code === 1 ? 'denied' : 'unavailable';
                 LocationPicker.updateDetectedLabel();
@@ -196,56 +192,45 @@ let fetchInProgress = false;
 let lastRefresh = 0;
 
 /**
- * Fetches weather data from DHMZ via CORS proxy and updates the display.
+ * Fetches weather data from the configured source via CORS proxy and updates the display.
  */
 async function fetchWeatherData() {
     // Prevent concurrent fetches (e.g., click + focus firing together)
     if (fetchInProgress) {
-        console.log('[DHMZ] Fetch already in progress, skipping');
+        console.log('[vrijeme] Fetch already in progress, skipping');
         return;
     }
     fetchInProgress = true;
     lastRefresh = Date.now();
 
     const cacheBuster = `?_=${Date.now()}`;
-    const fetchUrl = PROXY_URL + encodeURIComponent(DHMZ_XML_URL + cacheBuster);
+    const fetchUrl = PROXY_URL + encodeURIComponent(SOURCE_CONFIG.url + cacheBuster);
     const widget = document.getElementById('widget');
 
     widget.classList.add('refreshing');
-    console.log('[DHMZ] Fetching weather data...');
+    console.log('[vrijeme] Fetching weather data from', DATA_SOURCE);
 
     try {
         const response = await fetch(fetchUrl);
-        console.log('[DHMZ] Response status:', response.status);
+        console.log('[vrijeme] Response status:', response.status);
 
         if (!response.ok) {
             throw new Error(`HTTP error: ${response.status}`);
         }
 
-        const xmlText = await response.text();
-        console.log('[DHMZ] Response length:', xmlText.length, 'chars');
+        const responseText = await response.text();
+        console.log('[vrijeme] Response length:', responseText.length, 'chars');
 
-        // Verify we got XML, not an error page
-        if (!xmlText.startsWith('<?xml')) {
-            console.error('[DHMZ] Invalid response (not XML):', xmlText.substring(0, 200));
-            throw new Error('Invalid response from proxy');
+        // Parse based on data source
+        if (DATA_SOURCE === 'pljusak') {
+            cachedStations = parsePljusakResponse(responseText);
+        } else {
+            cachedStations = parseDhmzResponse(responseText);
         }
 
-        const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
-
-        // Check for XML parse errors
-        const parseError = xmlDoc.querySelector('parsererror');
-        if (parseError) {
-            console.error('[DHMZ] XML parse error:', parseError.textContent);
-            console.error('[DHMZ] XML tail (last 500 chars):\n', xmlText.slice(-500));
-            throw new Error('XML parse error');
-        }
-
-        const measurementTime = extractMeasurementTime(xmlDoc);
-        cachedStations = extractAllStations(xmlDoc, measurementTime);
         const collator = new Intl.Collator('hr');
         const stationNames = Object.keys(cachedStations).sort(collator.compare);
-        console.log('[DHMZ] Found stations:', stationNames.join(', ') || 'none');
+        console.log('[vrijeme] Found stations:', stationNames.length);
 
         // Clear any previous error toast on successful fetch
         hideToast();
@@ -255,10 +240,10 @@ async function fetchWeatherData() {
         renderSelectedStation();
 
     } catch (error) {
-        console.error('[DHMZ] Error:', error);
+        console.error('[vrijeme] Error:', error);
         // If we have cached data, show toast and keep displaying old data
         if (cachedStations) {
-            console.log('[DHMZ] Using cached data due to fetch error');
+            console.log('[vrijeme] Using cached data due to fetch error');
             showToast('Učitavanje nije uspjelo');
         } else {
             renderError('Greška: ' + error.message);
@@ -269,12 +254,67 @@ async function fetchWeatherData() {
     }
 }
 
-/**
- * Extracts measurement timestamp from XML.
- * @param {Document} xmlDoc
- * @returns {Date|null} Parsed measurement time, or null if unavailable
+// =============================================================================
+// DHMZ PARSER (vrijeme.hr XML format)
+// =============================================================================
+
+/*
+ * DHMZ XML STRUCTURE (https://vrijeme.hr/hrvatska1_n.xml)
+ *
+ * <?xml version="1.0" encoding="UTF-8"?>
+ * <Hrvatska>
+ *   <DatumTermin>
+ *     <Datum>DD.MM.YYYY</Datum>    <!-- Measurement date -->
+ *     <Termin>HH</Termin>          <!-- Hour (0-23) -->
+ *   </DatumTermin>
+ *   <Grad autom="0|1">             <!-- autom: 0=manual, 1=automatic station -->
+ *     <GradIme>Station Name</GradIme>
+ *     <Lat>XX.XXX</Lat>            <!-- Latitude (42-47°N) -->
+ *     <Lon>XX.XXX</Lon>            <!-- Longitude (13-19°E) -->
+ *     <Podatci>
+ *       <Temp>XX.X</Temp>          <!-- Temperature in °C -->
+ *       <Vlaga>XX</Vlaga>          <!-- Relative humidity % -->
+ *       <Tlak>XXXX.X</Tlak>        <!-- Pressure in hPa -->
+ *       <TlakTend>+X.X</TlakTend>  <!-- Pressure tendency -->
+ *       <VjetarSmjer>XX</VjetarSmjer>      <!-- Wind direction -->
+ *       <VjetarBrzina>X.X</VjetarBrzina>   <!-- Wind speed in m/s -->
+ *       <Vrijeme>description</Vrijeme>     <!-- Weather description -->
+ *     </Podatci>
+ *   </Grad>
+ * </Hrvatska>
  */
-function extractMeasurementTime(xmlDoc) {
+
+/**
+ * Parses DHMZ XML response and returns station data.
+ * @param {string} xmlText - Raw XML response
+ * @returns {Object<string, StationData>}
+ */
+function parseDhmzResponse(xmlText) {
+    // Verify we got XML, not an error page
+    if (!xmlText.startsWith('<?xml')) {
+        console.error('[vrijeme] Invalid response (not XML):', xmlText.substring(0, 200));
+        throw new Error('Invalid response from proxy');
+    }
+
+    const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
+
+    // Check for XML parse errors
+    const parseError = xmlDoc.querySelector('parsererror');
+    if (parseError) {
+        console.error('[vrijeme] XML parse error:', parseError.textContent);
+        throw new Error('XML parse error');
+    }
+
+    const measurementTime = extractDhmzMeasurementTime(xmlDoc);
+    return extractDhmzStations(xmlDoc, measurementTime);
+}
+
+/**
+ * Extracts measurement timestamp from DHMZ XML.
+ * @param {Document} xmlDoc
+ * @returns {Date|null}
+ */
+function extractDhmzMeasurementTime(xmlDoc) {
     const datumTermin = xmlDoc.querySelector('DatumTermin');
     if (!datumTermin) return null;
 
@@ -293,12 +333,12 @@ function extractMeasurementTime(xmlDoc) {
 }
 
 /**
- * Extracts all stations from XML.
+ * Extracts all stations from DHMZ XML.
  * @param {Document} xmlDoc
  * @param {Date|null} measurementTime
  * @returns {Object<string, StationData>}
  */
-function extractAllStations(xmlDoc, measurementTime) {
+function extractDhmzStations(xmlDoc, measurementTime) {
     const stations = xmlDoc.querySelectorAll('Grad');
     /** @type {Object<string, StationData>} */
     const result = {};
@@ -335,6 +375,159 @@ function extractAllStations(xmlDoc, measurementTime) {
     });
 
     return result;
+}
+
+// =============================================================================
+// PLJUSAK PARSER (pljusak.com JavaScript array format)
+// =============================================================================
+
+/*
+ * PLJUSAK.COM DATA STRUCTURE (https://pljusak.com/karta.php)
+ *
+ * The page contains a JavaScript array `var podaci = [...]` with weather
+ * observations from amateur stations. Data updates every 5-15 minutes.
+ *
+ * Each station entry is an array:
+ *   [0]  Type (lokalna, wu_05, wu_15, dhmz, arso, etc.)
+ *   [1]  Station name
+ *   [2]  Latitude (string)
+ *   [3]  Longitude (string)
+ *   [4]  Elevation in meters
+ *   [5]  Priority/order number
+ *   [6]  Station URL
+ *   [7]  Device type (e.g., "Davis Vantage Pro2")
+ *   [8]  Software (e.g., "WeatherLink")
+ *   [9]  Notes
+ *   [10] Measurement time (HH:MM:SS)
+ *   [11] Webcam URL (optional)
+ *   [12] Temperature in °C
+ *   [13] Temperature trend
+ *   [14] Pressure in hPa
+ *   [15] Pressure trend
+ *   [16] Humidity %
+ *   [17] Wind direction (e.g., "SSW", "N")
+ *   [18] Wind speed in m/s
+ *   ...  additional fields for precipitation, min/max temps, etc.
+ */
+
+/** Pljusak.com data array indices */
+const PODACI = {
+    TYPE: 0,
+    NAME: 1,
+    LAT: 2,
+    LON: 3,
+    ELEVATION: 4,
+    TIME: 10,
+    TEMPERATURE: 12,
+    PRESSURE: 14,
+    PRESSURE_TREND: 15,
+    HUMIDITY: 16,
+    WIND_DIR: 17,
+    WIND_SPEED: 18
+};
+
+/**
+ * Parses pljusak.com HTML response and returns station data.
+ * @param {string} htmlText - Raw HTML response containing JavaScript
+ * @returns {Object<string, StationData>}
+ */
+function parsePljusakResponse(htmlText) {
+    // Extract the podaci array from the JavaScript
+    const podaciMatch = htmlText.match(/var\s+podaci\s*=\s*(\[[\s\S]*?\]);/);
+    if (!podaciMatch) {
+        console.error('[vrijeme] Could not find podaci array in response');
+        throw new Error('Invalid response format');
+    }
+
+    let podaci;
+    try {
+        podaci = JSON.parse(podaciMatch[1]);
+    } catch (e) {
+        console.error('[vrijeme] Failed to parse podaci array:', e);
+        throw new Error('Failed to parse weather data');
+    }
+
+    console.log('[vrijeme] Parsed', podaci.length, 'station entries');
+    return extractPljusakStations(podaci);
+}
+
+/**
+ * Parses measurement time from pljusak.com format (HH:MM:SS).
+ * @param {string|null} timeStr - Time string like "18:10:00"
+ * @returns {Date|null}
+ */
+function parsePljusakTime(timeStr) {
+    if (!timeStr || typeof timeStr !== 'string') return null;
+    const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) return null;
+
+    const now = new Date();
+    const hour = parseInt(match[1], 10);
+    const minute = parseInt(match[2], 10);
+
+    const measurementTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+
+    // If measurement time is in the future, assume it's from yesterday
+    if (measurementTime > now) {
+        measurementTime.setDate(measurementTime.getDate() - 1);
+    }
+
+    return measurementTime;
+}
+
+/**
+ * Extracts all stations from pljusak.com podaci array.
+ * @param {Array[]} podaci - Array of station data arrays
+ * @returns {Object<string, StationData>}
+ */
+function extractPljusakStations(podaci) {
+    /** @type {Object<string, StationData>} */
+    const result = {};
+
+    for (const entry of podaci) {
+        const name = entry[PODACI.NAME];
+        if (!name) continue;
+
+        const tempStr = entry[PODACI.TEMPERATURE];
+        // Skip if no valid temperature
+        if (tempStr === null || tempStr === undefined || tempStr === '-' || tempStr === '') continue;
+
+        const temperature = parseFloat(tempStr);
+        if (isNaN(temperature)) continue;
+
+        const lat = parseFloat(entry[PODACI.LAT]);
+        const lon = parseFloat(entry[PODACI.LON]);
+        if (!isFinite(lat) || !isFinite(lon)) continue;
+
+        const measurementTime = parsePljusakTime(entry[PODACI.TIME]);
+
+        result[name] = {
+            name,
+            lat,
+            lon,
+            temperature,
+            humidity: parseNumberOrNull(entry[PODACI.HUMIDITY]),
+            pressure: parseNumberOrNull(entry[PODACI.PRESSURE]),
+            pressureTrend: parseNumberOrNull(entry[PODACI.PRESSURE_TREND]),
+            windDirection: entry[PODACI.WIND_DIR] || null,
+            windSpeed: parseNumberOrNull(entry[PODACI.WIND_SPEED]),
+            condition: null, // pljusak.com doesn't provide weather condition text
+            measurementTime
+        };
+    }
+
+    return result;
+}
+
+/**
+ * Parses a string value as a number, or returns null if invalid.
+ * @param {string|number|null} value
+ * @returns {number|null}
+ */
+function parseNumberOrNull(value) {
+    if (value === null || value === undefined || value === '-' || value === '') return null;
+    const num = parseFloat(value);
+    return isNaN(num) ? null : num;
 }
 
 /**
@@ -394,7 +587,7 @@ function findNearestStation(stations, lat, lon) {
         }
     }
 
-    console.log('[DHMZ] Nearest station:', nearest, `(${minDist.toFixed(1)} km)`);
+    console.log('[vrijeme] Nearest station:', nearest, `(${minDist.toFixed(1)} km)`);
     return nearest ? { name: nearest, distance: minDist } : null;
 }
 
@@ -703,14 +896,14 @@ function renderSelectedStation() {
         // If still no station (no coords), just return and wait
         result = getStationForLocation(cachedStations, selectedLocation);
         if (result) {
-            console.warn(`[DHMZ] Station "${notFoundStation}" not found, falling back to nearest (${result.station.name})`);
+            console.warn(`[vrijeme] Station "${notFoundStation}" not found, falling back to nearest (${result.station.name})`);
         } else {
-            console.warn(`[DHMZ] Station "${notFoundStation}" not found, cannot determine nearest (no location)`);
+            console.warn(`[vrijeme] Station "${notFoundStation}" not found, cannot determine nearest (no location)`);
         }
         if (!result) return;
     }
 
-    console.log('[DHMZ] Displaying:', result.station.name, result.station.temperature + '°C');
+    console.log('[vrijeme] Displaying:', result.station.name, result.station.temperature + '°C');
     render(result.station, result.distance);
 }
 
@@ -768,19 +961,22 @@ function hideToast() {
 
 /**
  * Parses station name into display components.
- * For city stations (e.g., "Zagreb-Grič"), returns city as title and location as subtitle.
+ * For city stations (e.g., "Zagreb-Grič" or "Zagreb, Podsused"), returns city as title
+ * and location as subtitle. Separator depends on data source.
  * For other stations, returns full name as title with no subtitle.
  * @param {string} name - Station name
  * @returns {{title: string, subtitle: string|null}}
  */
 function parseStationName(name) {
-    const hyphenIndex = name.indexOf('-');
-    if (hyphenIndex > 0) {
-        const prefix = name.substring(0, hyphenIndex);
-        if (CITY_STATION_PREFIXES.includes(prefix)) {
+    const separator = SOURCE_CONFIG.nameSeparator;
+    const sepIndex = name.indexOf(separator);
+    if (sepIndex > 0) {
+        const prefix = name.substring(0, sepIndex);
+        // If cityPrefixes is null, always split; otherwise check whitelist
+        if (SOURCE_CONFIG.cityPrefixes === null || SOURCE_CONFIG.cityPrefixes.includes(prefix)) {
             return {
                 title: prefix,
-                subtitle: name.substring(hyphenIndex + 1)
+                subtitle: name.substring(sepIndex + separator.length)
             };
         }
     }
@@ -900,10 +1096,18 @@ function formatMeasurementTime(measurementTime) {
 
     const ageMs = Date.now() - measurementTime;
 
-    // Show "staro" if very old, otherwise show as "19h"
-    const formattedTime = ageMs > OLD_THRESHOLD_MS
-        ? 'staro'
-        : `${measurementTime.getHours()}h`;
+    let formattedTime;
+    if (ageMs > OLD_THRESHOLD_MS) {
+        formattedTime = 'staro';
+    } else if (DATA_SOURCE === 'pljusak') {
+        // Pljusak has minute precision, show HH:MM
+        const hours = measurementTime.getHours().toString().padStart(2, '0');
+        const minutes = measurementTime.getMinutes().toString().padStart(2, '0');
+        formattedTime = `${hours}:${minutes}`;
+    } else {
+        // DHMZ only has hour precision, show "19h"
+        formattedTime = `${measurementTime.getHours()}h`;
+    }
 
     return {
         formattedTime,
@@ -971,7 +1175,7 @@ const StationMap = {
         snapDistance: 20,
         /** Zoom limits */
         minZoom: 1,
-        maxZoom: 6
+        maxZoom: 100
     },
 
     // --- State ---
