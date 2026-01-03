@@ -2,11 +2,12 @@
   "name": "DHMZ Vrijeme",
   "short_name": "Vrijeme",
   "description": "Trenutno vrijeme u Hrvatskoj (DHMZ)",
-  "start_url": "./app/",
-  "scope": "./app/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
+  "capture_links": "none",
   "icons": [
     {
       "src": "icon-192.png",
