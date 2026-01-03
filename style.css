@@ -331,17 +331,17 @@ body {
 /* Source switcher */
 .source-switcher {
     position: absolute;
-    top: 12px;
-    left: 12px;
+    top: 20px;
+    left: 20px;
 }
 
 .source-trigger {
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.3);
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 0;
     -webkit-tap-highlight-color: transparent;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -357,28 +357,21 @@ body {
     border-radius: 4px;
 }
 
-/* Larger tap target on touch devices */
-@media (pointer: coarse) {
-    .source-trigger {
-        font-size: 0.75rem;
-        padding: 8px 12px;
-    }
-}
-
 .location-picker {
     position: absolute;
-    top: 12px;
-    right: 12px;
+    top: 20px;
+    right: 20px;
 }
 
 .location-trigger {
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.3);
-    font-size: 1rem;
+    font-size: 1.25rem;
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 0;
     -webkit-tap-highlight-color: transparent;
+    line-height: 1;
 }
 
 .location-trigger:hover {
@@ -410,6 +403,14 @@ body {
     z-index: 100;
 }
 
+/* On touch devices, open dropdown to the left (less room on right edge) */
+@media (pointer: coarse) {
+    .location-dropdown {
+        left: auto;
+        right: 0;
+    }
+}
+
 /* Custom scrollbar */
 .location-dropdown::-webkit-scrollbar {
     width: 6px;
@@ -426,19 +427,6 @@ body {
 
 .location-dropdown::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
-}
-
-/* Larger tap target and right-aligned dropdown on touch devices */
-@media (pointer: coarse) {
-    .location-trigger {
-        font-size: 1.5rem;
-        padding: 8px 12px;
-    }
-
-    .location-dropdown {
-        left: auto;
-        right: 0;
-    }
 }
 
 /* Larger dropdown on desktop */
