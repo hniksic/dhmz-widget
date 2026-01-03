@@ -5,21 +5,42 @@
  * - DHMZ (Croatian Meteorological Service) - official stations
  * - pljusak.com - amateur weather station network
  *
- * Use ?source=pljusak URL parameter to switch to pljusak.com data.
- * Default is DHMZ.
+ * Source can be switched via the UI toggle in the top-left corner.
+ * Source preference is saved to localStorage.
  */
 
 // =============================================================================
 // DATA SOURCE CONFIGURATION
 // =============================================================================
 
+/** LocalStorage key for source preference */
+const SOURCE_KEY = 'weather-source';
+
 /**
- * Detect data source from URL parameter.
- * Usage: ?source=pljusak or ?source=dhmz (default)
+ * Get saved source from localStorage, with URL override for backwards compatibility.
+ * @returns {'dhmz' | 'pljusak'}
  */
-const DATA_SOURCE = new URLSearchParams(window.location.search).get('source') === 'pljusak'
-    ? 'pljusak'
-    : 'dhmz';
+function getSavedSource() {
+    // URL parameter overrides localStorage (for backwards compatibility)
+    const urlSource = new URLSearchParams(window.location.search).get('source');
+    if (urlSource === 'pljusak' || urlSource === 'dhmz') {
+        return urlSource;
+    }
+    // Otherwise use localStorage, defaulting to 'dhmz'
+    const saved = localStorage.getItem(SOURCE_KEY);
+    return saved === 'pljusak' ? 'pljusak' : 'dhmz';
+}
+
+/**
+ * Save source preference to localStorage.
+ * @param {'dhmz' | 'pljusak'} source
+ */
+function saveSource(source) {
+    localStorage.setItem(SOURCE_KEY, source);
+}
+
+/** Current data source (mutable - can be changed via UI) */
+let DATA_SOURCE = getSavedSource();
 
 /**
  * Data source configurations
@@ -40,6 +61,7 @@ const DATA_SOURCES = {
             'Zadar',
             'Zagreb',
         ],
+        label: 'DHMZ',
     },
     pljusak: {
         url: 'https://pljusak.com/karta.php',
@@ -48,11 +70,14 @@ const DATA_SOURCES = {
         nameSeparator: ', ',
         // null = always split on separator (all pljusak names with comma are "City, Location")
         cityPrefixes: null,
+        label: 'pljusak',
     }
 };
 
-/** Current source configuration */
-const SOURCE_CONFIG = DATA_SOURCES[DATA_SOURCE];
+/** Get current source configuration (dynamic lookup) */
+function getSourceConfig() {
+    return DATA_SOURCES[DATA_SOURCE];
+}
 
 /** CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers) */
 const PROXY_URL = 'https://corsproxy.io/?';
@@ -60,8 +85,10 @@ const PROXY_URL = 'https://corsproxy.io/?';
 /** Special location that uses geolocation to find nearest station */
 const NEAREST_LOCATION = 'Najbliža';
 
-/** LocalStorage key for selected location (source-specific) */
-const LOCATION_KEY = SOURCE_CONFIG.locationKey;
+/** Get LocalStorage key for selected location (source-specific) */
+function getLocationKey() {
+    return getSourceConfig().locationKey;
+}
 
 /** Cached station data from last fetch */
 let cachedStations = null;
@@ -204,7 +231,7 @@ async function fetchWeatherData() {
     lastRefresh = Date.now();
 
     const cacheBuster = `?_=${Date.now()}`;
-    const fetchUrl = PROXY_URL + encodeURIComponent(SOURCE_CONFIG.url + cacheBuster);
+    const fetchUrl = PROXY_URL + encodeURIComponent(getSourceConfig().url + cacheBuster);
     const widget = document.getElementById('widget');
 
     widget.classList.add('refreshing');
@@ -423,8 +450,123 @@ const PODACI = {
     PRESSURE_TREND: 15,
     HUMIDITY: 16,
     WIND_DIR: 17,
-    WIND_SPEED: 18
+    WIND_SPEED: 18,
+    DEWPOINT: 24
 };
+
+/**
+ * Generates a weather description based on measured values.
+ * Used for pljusak.com which doesn't provide condition text.
+ *
+ * @param {number} temp - Temperature in °C
+ * @param {number|null} humidity - Relative humidity in %
+ * @param {number|null} windSpeed - Wind speed in m/s
+ * @param {number|null} dewpoint - Dewpoint temperature in °C
+ * @returns {string} Weather description in Croatian
+ */
+function generateWeatherDescription(temp, humidity, windSpeed, dewpoint) {
+    const parts = [];
+
+    // Fog detection: temp within 2°C of dewpoint with high humidity
+    const isFoggy = dewpoint !== null && Math.abs(temp - dewpoint) < 2 && (humidity === null || humidity > 80);
+
+    // Wind classification
+    const isWindy = windSpeed !== null && windSpeed >= 8;
+    const isVeryWindy = windSpeed !== null && windSpeed >= 15;
+
+    // Humidity feel (only relevant for warmer temps)
+    const isMuggy = humidity !== null && humidity > 80 && temp > 20;
+    const isDry = humidity !== null && humidity < 40;
+
+    // Temperature descriptions with character
+    if (isFoggy) {
+        if (temp < 0) {
+            parts.push('ledena magla');
+        } else if (temp < 5) {
+            parts.push('hladno i maglovito');
+        } else {
+            parts.push('maglovito');
+        }
+    } else if (temp >= 35) {
+        if (isDry) {
+            parts.push('vrućina, suho');
+        } else if (isMuggy) {
+            parts.push('nesnosna vrućina');
+        } else {
+            parts.push('jako vruće');
+        }
+    } else if (temp >= 30) {
+        if (isMuggy) {
+            parts.push('vruće i sparno');
+        } else if (isDry) {
+            parts.push('vruće i suho');
+        } else {
+            parts.push('vruće');
+        }
+    } else if (temp >= 25) {
+        if (isMuggy) {
+            parts.push('toplo i sparno');
+        } else if (isWindy) {
+            parts.push('toplo uz vjetar');
+        } else {
+            parts.push('toplo');
+        }
+    } else if (temp >= 18) {
+        if (isWindy) {
+            parts.push('ugodno uz povjetarac');
+        } else if (isDry) {
+            parts.push('ugodno i suho');
+        } else {
+            parts.push('ugodno');
+        }
+    } else if (temp >= 10) {
+        if (isVeryWindy) {
+            parts.push('svježe i vjetrovito');
+        } else if (isWindy) {
+            parts.push('svježe uz vjetar');
+        } else if (humidity !== null && humidity > 85) {
+            parts.push('svježe i vlažno');
+        } else {
+            parts.push('svježe');
+        }
+    } else if (temp >= 5) {
+        if (isVeryWindy) {
+            parts.push('hladno i vjetrovito');
+        } else if (isWindy) {
+            parts.push('prohladno uz vjetar');
+        } else if (humidity !== null && humidity > 90) {
+            parts.push('hladno i vlažno');
+        } else {
+            parts.push('prohladno');
+        }
+    } else if (temp >= 0) {
+        if (isVeryWindy) {
+            parts.push('hladno uz oštar vjetar');
+        } else if (isWindy) {
+            parts.push('hladno i vjetrovito');
+        } else if (humidity !== null && humidity > 90) {
+            parts.push('hladno i vlažno');
+        } else {
+            parts.push('hladno');
+        }
+    } else if (temp >= -5) {
+        if (isVeryWindy) {
+            parts.push('ledeno uz jak vjetar');
+        } else if (isWindy) {
+            parts.push('ledeno i vjetrovito');
+        } else {
+            parts.push('ledeno');
+        }
+    } else {
+        if (isWindy) {
+            parts.push('vrlo ledeno uz vjetar');
+        } else {
+            parts.push('vrlo ledeno');
+        }
+    }
+
+    return parts.join(', ');
+}
 
 /**
  * Parses pljusak.com HTML response and returns station data.
@@ -475,14 +617,20 @@ function parsePljusakTime(timeStr) {
     return measurementTime;
 }
 
+/** Maximum age for pljusak.com readings - older stations are filtered out (12 hours) */
+const PLJUSAK_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
 /**
  * Extracts all stations from pljusak.com podaci array.
+ * Filters out stations with readings older than 12 hours.
  * @param {Array[]} podaci - Array of station data arrays
  * @returns {Object<string, StationData>}
  */
 function extractPljusakStations(podaci) {
     /** @type {Object<string, StationData>} */
     const result = {};
+    const now = Date.now();
+    let staleCount = 0;
 
     for (const entry of podaci) {
         const name = entry[PODACI.NAME];
@@ -501,19 +649,33 @@ function extractPljusakStations(podaci) {
 
         const measurementTime = parsePljusakTime(entry[PODACI.TIME]);
 
+        // Filter out stations with stale readings (older than 12 hours)
+        if (!measurementTime || (now - measurementTime) > PLJUSAK_MAX_AGE_MS) {
+            staleCount++;
+            continue;
+        }
+
+        const humidity = parseNumberOrNull(entry[PODACI.HUMIDITY]);
+        const windSpeed = parseNumberOrNull(entry[PODACI.WIND_SPEED]);
+        const dewpoint = parseNumberOrNull(entry[PODACI.DEWPOINT]);
+
         result[name] = {
             name,
             lat,
             lon,
             temperature,
-            humidity: parseNumberOrNull(entry[PODACI.HUMIDITY]),
+            humidity,
             pressure: parseNumberOrNull(entry[PODACI.PRESSURE]),
             pressureTrend: parseNumberOrNull(entry[PODACI.PRESSURE_TREND]),
             windDirection: entry[PODACI.WIND_DIR] || null,
-            windSpeed: parseNumberOrNull(entry[PODACI.WIND_SPEED]),
-            condition: null, // pljusak.com doesn't provide weather condition text
+            windSpeed,
+            condition: generateWeatherDescription(temperature, humidity, windSpeed, dewpoint),
             measurementTime
         };
+    }
+
+    if (staleCount > 0) {
+        console.log('[vrijeme] Filtered out', staleCount, 'stations with readings older than 12h');
     }
 
     return result;
@@ -593,17 +755,17 @@ function findNearestStation(stations, lat, lon) {
 
 /** Check if user has explicitly chosen a location */
 function hasSelectedLocation() {
-    return localStorage.getItem(LOCATION_KEY) !== null;
+    return localStorage.getItem(getLocationKey()) !== null;
 }
 
 /** Get selected location from localStorage */
 function getSelectedLocation() {
-    return localStorage.getItem(LOCATION_KEY) || NEAREST_LOCATION;
+    return localStorage.getItem(getLocationKey()) || NEAREST_LOCATION;
 }
 
 /** Save selected location to localStorage */
 function setSelectedLocation(location) {
-    localStorage.setItem(LOCATION_KEY, location);
+    localStorage.setItem(getLocationKey(), location);
 }
 
 /** Special value for "show map" option in dropdown */
@@ -859,6 +1021,72 @@ const LocationPicker = {
 // Initialize location picker
 LocationPicker.init();
 
+/**
+ * SourceSwitcher - Handles toggling between data sources (DHMZ/pljusak).
+ *
+ * When switching sources, finds the nearest station in the new source:
+ * - If "Najbliža" was selected: uses user's GPS to find nearest
+ * - Otherwise: uses old station's coordinates to find nearest in new source
+ */
+const SourceSwitcher = {
+    /** Update the button text to show current source */
+    updateLabel() {
+        const btn = document.getElementById('source-trigger');
+        if (btn) {
+            btn.textContent = getSourceConfig().label;
+        }
+    },
+
+    /** Toggle to the other source and reload data */
+    async toggle() {
+        // Capture old station info before switching
+        const oldLocation = getSelectedLocation();
+        const oldStation = cachedStations?.[oldLocation] ?? null;
+        const wasNearest = oldLocation === NEAREST_LOCATION;
+
+        // Switch source
+        const newSource = DATA_SOURCE === 'dhmz' ? 'pljusak' : 'dhmz';
+        DATA_SOURCE = newSource;
+        saveSource(newSource);
+        this.updateLabel();
+
+        // Clear cached data
+        cachedStations = null;
+
+        // Fetch new data
+        await fetchWeatherData();
+
+        // Map to nearest station in new source
+        if (cachedStations) {
+            if (wasNearest) {
+                // "Najbliža" was selected - keep it (nearest logic uses GPS automatically)
+                setSelectedLocation(NEAREST_LOCATION);
+            } else if (oldStation && isFinite(oldStation.lat) && isFinite(oldStation.lon)) {
+                // Find station nearest to old station's coordinates
+                const nearest = findNearestStation(cachedStations, oldStation.lat, oldStation.lon);
+                if (nearest) {
+                    console.log('[vrijeme] Source switch: mapped', oldLocation, '→', nearest.name);
+                    setSelectedLocation(nearest.name);
+                }
+            }
+            renderSelectedStation();
+        }
+    },
+
+    init() {
+        const self = this;
+        const btn = document.getElementById('source-trigger');
+
+        if (btn) {
+            this.updateLabel();
+            btn.addEventListener('click', () => self.toggle());
+        }
+    }
+};
+
+// Initialize source switcher
+SourceSwitcher.init();
+
 /** Render the currently selected station from cached data */
 function renderSelectedStation() {
     if (!cachedStations) return;
@@ -968,12 +1196,13 @@ function hideToast() {
  * @returns {{title: string, subtitle: string|null}}
  */
 function parseStationName(name) {
-    const separator = SOURCE_CONFIG.nameSeparator;
+    const config = getSourceConfig();
+    const separator = config.nameSeparator;
     const sepIndex = name.indexOf(separator);
     if (sepIndex > 0) {
         const prefix = name.substring(0, sepIndex);
         // If cityPrefixes is null, always split; otherwise check whitelist
-        if (SOURCE_CONFIG.cityPrefixes === null || SOURCE_CONFIG.cityPrefixes.includes(prefix)) {
+        if (config.cityPrefixes === null || config.cityPrefixes.includes(prefix)) {
             return {
                 title: prefix,
                 subtitle: name.substring(sepIndex + separator.length)

@@ -303,6 +303,43 @@ body {
     -webkit-tap-highlight-color: transparent;
 }
 
+/* Source switcher */
+.source-switcher {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+}
+
+.source-trigger {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.65rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    -webkit-tap-highlight-color: transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.source-trigger:hover {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.source-trigger:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Larger tap target on touch devices */
+@media (pointer: coarse) {
+    .source-trigger {
+        font-size: 0.75rem;
+        padding: 8px 12px;
+    }
+}
+
 .location-picker {
     position: absolute;
     top: 12px;

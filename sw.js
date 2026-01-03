@@ -18,7 +18,7 @@
  * - Bump version whenever deploying changes to cached files
  */
 
-const CACHE_NAME = 'zagreb-temp-v54';
+const CACHE_NAME = 'zagreb-temp-v60';
 
 const ASSETS = [
   './',
@@ -27,7 +27,9 @@ const ASSETS = [
   './app.js',
   './icon.svg',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './app/',
+  './app/index.html'
 ];
 
 /*
