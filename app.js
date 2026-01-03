@@ -465,107 +465,113 @@ const PODACI = {
  * @returns {string} Weather description in Croatian
  */
 function generateWeatherDescription(temp, humidity, windSpeed, dewpoint) {
-    const parts = [];
+    // Wind levels (m/s)
+    const isCalm = windSpeed === null || windSpeed < 3;
+    const hasBreeze = windSpeed !== null && windSpeed >= 3 && windSpeed < 6;
+    const isWindy = windSpeed !== null && windSpeed >= 6 && windSpeed < 11;
+    const isStrongWind = windSpeed !== null && windSpeed >= 11;
 
-    // Fog detection: temp within 2°C of dewpoint with high humidity
-    const isFoggy = dewpoint !== null && Math.abs(temp - dewpoint) < 2 && (humidity === null || humidity > 80);
+    // Fog: very strict - near-saturation, tight dewpoint spread, calm, cool temps.
+    // Real fog is rare; when uncertain, prefer non-fog descriptions.
+    const isFoggy = dewpoint !== null &&
+                    humidity !== null &&
+                    humidity >= 97 &&
+                    Math.abs(temp - dewpoint) <= 1 &&
+                    temp >= -3 && temp <= 15 &&
+                    isCalm;
 
-    // Wind classification
-    const isWindy = windSpeed !== null && windSpeed >= 8;
-    const isVeryWindy = windSpeed !== null && windSpeed >= 15;
+    // Humidity feel (temperature-dependent)
+    const isMuggy = humidity !== null && humidity >= 65 && temp >= 26;
+    const isOppressive = humidity !== null && humidity >= 75 && temp >= 30;
+    const isDamp = humidity !== null && humidity >= 85 && temp < 12;
+    const isDry = humidity !== null && humidity < 30 && temp >= 25;
 
-    // Humidity feel (only relevant for warmer temps)
-    const isMuggy = humidity !== null && humidity > 80 && temp > 20;
-    const isDry = humidity !== null && humidity < 40;
-
-    // Temperature descriptions with character
+    // Fog (rare)
     if (isFoggy) {
-        if (temp < 0) {
-            parts.push('ledena magla');
-        } else if (temp < 5) {
-            parts.push('hladno i maglovito');
-        } else {
-            parts.push('maglovito');
-        }
-    } else if (temp >= 35) {
-        if (isDry) {
-            parts.push('vrućina, suho');
-        } else if (isMuggy) {
-            parts.push('nesnosna vrućina');
-        } else {
-            parts.push('jako vruće');
-        }
-    } else if (temp >= 30) {
-        if (isMuggy) {
-            parts.push('vruće i sparno');
-        } else if (isDry) {
-            parts.push('vruće i suho');
-        } else {
-            parts.push('vruće');
-        }
-    } else if (temp >= 25) {
-        if (isMuggy) {
-            parts.push('toplo i sparno');
-        } else if (isWindy) {
-            parts.push('toplo uz vjetar');
-        } else {
-            parts.push('toplo');
-        }
-    } else if (temp >= 18) {
-        if (isWindy) {
-            parts.push('ugodno uz povjetarac');
-        } else if (isDry) {
-            parts.push('ugodno i suho');
-        } else {
-            parts.push('ugodno');
-        }
-    } else if (temp >= 10) {
-        if (isVeryWindy) {
-            parts.push('svježe i vjetrovito');
-        } else if (isWindy) {
-            parts.push('svježe uz vjetar');
-        } else if (humidity !== null && humidity > 85) {
-            parts.push('svježe i vlažno');
-        } else {
-            parts.push('svježe');
-        }
-    } else if (temp >= 5) {
-        if (isVeryWindy) {
-            parts.push('hladno i vjetrovito');
-        } else if (isWindy) {
-            parts.push('prohladno uz vjetar');
-        } else if (humidity !== null && humidity > 90) {
-            parts.push('hladno i vlažno');
-        } else {
-            parts.push('prohladno');
-        }
-    } else if (temp >= 0) {
-        if (isVeryWindy) {
-            parts.push('hladno uz oštar vjetar');
-        } else if (isWindy) {
-            parts.push('hladno i vjetrovito');
-        } else if (humidity !== null && humidity > 90) {
-            parts.push('hladno i vlažno');
-        } else {
-            parts.push('hladno');
-        }
-    } else if (temp >= -5) {
-        if (isVeryWindy) {
-            parts.push('ledeno uz jak vjetar');
-        } else if (isWindy) {
-            parts.push('ledeno i vjetrovito');
-        } else {
-            parts.push('ledeno');
-        }
-    } else {
-        if (isWindy) {
-            parts.push('vrlo ledeno uz vjetar');
-        } else {
-            parts.push('vrlo ledeno');
-        }
+        return temp <= 0 ? 'ledena magla' : 'magla';
     }
 
-    return parts.join(', ');
+    // Extreme heat (>= 36°C)
+    if (temp >= 36) {
+        if (isOppressive) return 'neizdrživa sparina';
+        if (isMuggy) return 'teška vrućina';
+        return 'žega';
+    }
+
+    // Hot (30-36°C)
+    if (temp >= 30) {
+        if (isOppressive) return 'sparina';
+        if (isMuggy) return 'sparno';
+        if (isDry) return 'suha vrućina';
+        if (isStrongWind) return 'vruće, jak vjetar';
+        return 'vruće';
+    }
+
+    // Warm (25-30°C)
+    if (temp >= 25) {
+        if (isMuggy) return 'toplo i sparno';
+        if (hasBreeze) return 'toplo uz povjetarac';
+        if (isWindy || isStrongWind) return 'toplo, vjetrovito';
+        return 'toplo';
+    }
+
+    // Pleasant (20-25°C)
+    if (temp >= 20) {
+        if (humidity !== null && humidity >= 75) return 'toplo i vlažno';
+        if (hasBreeze) return 'ugodno';
+        if (isWindy) return 'ugodno uz vjetar';
+        if (isStrongWind) return 'umjereno, vjetrovito';
+        return 'ugodna temperatura';
+    }
+
+    // Mild (15-20°C)
+    if (temp >= 15) {
+        if (isStrongWind) return 'svježe, jak vjetar';
+        if (isWindy) return 'svježe uz vjetar';
+        if (isDamp) return 'svježe i vlažno';
+        return 'svježe';
+    }
+
+    // Cool (10-15°C)
+    if (temp >= 10) {
+        if (isStrongWind) return 'hladan vjetar';
+        if (isWindy) return 'prohladno uz vjetar';
+        if (isDamp) return 'prohladno i vlažno';
+        return 'prohladno';
+    }
+
+    // Chilly (5-10°C)
+    if (temp >= 5) {
+        if (isStrongWind) return 'oštar vjetar';
+        if (isWindy) return 'hladno uz vjetar';
+        if (isDamp) return 'neugodna vlaga';
+        return 'prohladno';
+    }
+
+    // Cold (0-5°C)
+    if (temp >= 0) {
+        if (isStrongWind) return 'prodoran vjetar';
+        if (isWindy) return 'hladno, vjetrovito';
+        if (isDamp) return 'vlažna hladnoća';
+        return 'hladno';
+    }
+
+    // Freezing (-5 to 0°C)
+    if (temp >= -5) {
+        if (isStrongWind) return 'ledeno, oštar vjetar';
+        if (isWindy) return 'ledeno uz vjetar';
+        return 'ledeno';
+    }
+
+    // Very cold (-10 to -5°C)
+    if (temp >= -10) {
+        if (isWindy || isStrongWind) return 'vrlo ledeno uz vjetar';
+        return 'vrlo ledeno';
+    }
+
+    // Extreme cold (< -10°C)
+    if (isWindy || isStrongWind) return 'jaka studen';
+    return 'studen';
 }
 
 /**
