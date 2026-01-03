@@ -1044,6 +1044,17 @@ const SourceSwitcher = {
         if (mapBtn) mapBtn.textContent = label;
     },
 
+    /** Update URL to reflect current source (without page reload) */
+    updateUrl() {
+        const url = new URL(window.location.href);
+        if (DATA_SOURCE === 'dhmz') {
+            url.searchParams.delete('source');
+        } else {
+            url.searchParams.set('source', DATA_SOURCE);
+        }
+        history.replaceState(null, '', url);
+    },
+
     /** Toggle to the other source and reload data */
     async toggle() {
         // Capture old station info before switching
@@ -1056,6 +1067,7 @@ const SourceSwitcher = {
         DATA_SOURCE = newSource;
         saveSource(newSource);
         this.updateLabel();
+        this.updateUrl();
 
         // Clear cached data
         cachedStations = null;
