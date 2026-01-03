@@ -43,7 +43,9 @@ function saveSource(source) {
 let DATA_SOURCE = getSavedSource();
 
 /**
- * Data source configurations
+ * Data source configurations.
+ * Each source has a parser object (DhmzParser or PljusakParser) that handles
+ * parsing the response and formatting measurement times.
  */
 const DATA_SOURCES = {
     dhmz: {
@@ -62,6 +64,7 @@ const DATA_SOURCES = {
             'Zagreb',
         ],
         label: 'DHMZ',
+        get parser() { return DhmzParser; },
     },
     pljusak: {
         url: 'https://pljusak.com/karta.php',
@@ -71,6 +74,7 @@ const DATA_SOURCES = {
         // null = always split on separator (all pljusak names with comma are "City, Location")
         cityPrefixes: null,
         label: 'pljusak',
+        get parser() { return PljusakParser; },
     }
 };
 
@@ -248,12 +252,8 @@ async function fetchWeatherData() {
         const responseText = await response.text();
         console.log('[vrijeme] Response length:', responseText.length, 'chars');
 
-        // Parse based on data source
-        if (DATA_SOURCE === 'pljusak') {
-            cachedStations = parsePljusakResponse(responseText);
-        } else {
-            cachedStations = parseDhmzResponse(responseText);
-        }
+        // Parse using source-specific parser
+        cachedStations = getSourceConfig().parser.parse(responseText);
 
         const collator = new Intl.Collator('hr');
         const stationNames = Object.keys(cachedStations).sort(collator.compare);
@@ -312,97 +312,111 @@ async function fetchWeatherData() {
  */
 
 /**
- * Parses DHMZ XML response and returns station data.
- * @param {string} xmlText - Raw XML response
- * @returns {Object<string, StationData>}
+ * DhmzParser - Parses weather data from DHMZ (vrijeme.hr) XML format.
  */
-function parseDhmzResponse(xmlText) {
-    // Verify we got XML, not an error page
-    if (!xmlText.startsWith('<?xml')) {
-        console.error('[vrijeme] Invalid response (not XML):', xmlText.substring(0, 200));
-        throw new Error('Invalid response from proxy');
+const DhmzParser = {
+    /**
+     * Parses DHMZ XML response and returns station data.
+     * @param {string} xmlText - Raw XML response
+     * @returns {Object<string, StationData>}
+     */
+    parse(xmlText) {
+        // Verify we got XML, not an error page
+        if (!xmlText.startsWith('<?xml')) {
+            console.error('[vrijeme] Invalid response (not XML):', xmlText.substring(0, 200));
+            throw new Error('Invalid response from proxy');
+        }
+
+        const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
+
+        // Check for XML parse errors
+        const parseError = xmlDoc.querySelector('parsererror');
+        if (parseError) {
+            console.error('[vrijeme] XML parse error:', parseError.textContent);
+            throw new Error('XML parse error');
+        }
+
+        const measurementTime = this.extractMeasurementTime(xmlDoc);
+        return this.extractStations(xmlDoc, measurementTime);
+    },
+
+    /**
+     * Extracts measurement timestamp from DHMZ XML.
+     * @param {Document} xmlDoc
+     * @returns {Date|null}
+     */
+    extractMeasurementTime(xmlDoc) {
+        const datumTermin = xmlDoc.querySelector('DatumTermin');
+        if (!datumTermin) return null;
+
+        const datum = datumTermin.querySelector('Datum');
+        const termin = datumTermin.querySelector('Termin');
+
+        if (datum && termin) {
+            // Datum format: "DD.MM.YYYY", Termin format: "HH"
+            const match = datum.textContent.trim().match(/(\d{2})\.(\d{2})\.(\d{4})/);
+            if (!match) return null;
+            const [, day, month, year] = match;
+            const hour = parseInt(termin.textContent.trim(), 10);
+            return new Date(year, month - 1, day, hour);
+        }
+        return null;
+    },
+
+    /**
+     * Extracts all stations from DHMZ XML.
+     * @param {Document} xmlDoc
+     * @param {Date|null} measurementTime
+     * @returns {Object<string, StationData>}
+     */
+    extractStations(xmlDoc, measurementTime) {
+        const stations = xmlDoc.querySelectorAll('Grad');
+        /** @type {Object<string, StationData>} */
+        const result = {};
+
+        stations.forEach(station => {
+            const nameEl = station.querySelector('GradIme');
+            if (!nameEl) return;
+
+            const name = nameEl.textContent.trim();
+            const lat = parseFloat(station.querySelector('Lat')?.textContent);
+            const lon = parseFloat(station.querySelector('Lon')?.textContent);
+            const data = station.querySelector('Podatci');
+            if (!data) return;
+
+            const temp = data.querySelector('Temp');
+            const tempValue = temp?.textContent.trim();
+
+            // Skip if no valid temperature
+            if (!tempValue || tempValue === '-') return;
+
+            result[name] = {
+                name,
+                lat,
+                lon,
+                temperature: parseFloat(tempValue),
+                humidity: getNumberOrNull(data, 'Vlaga'),
+                pressure: getNumberOrNull(data, 'Tlak'),
+                pressureTrend: getNumberOrNull(data, 'TlakTend'),
+                windDirection: getTextOrNull(data, 'VjetarSmjer'),
+                windSpeed: getNumberOrNull(data, 'VjetarBrzina'),
+                condition: getTextOrNull(data, 'Vrijeme'),
+                measurementTime
+            };
+        });
+
+        return result;
+    },
+
+    /**
+     * Formats measurement time for display (hour precision).
+     * @param {Date} date
+     * @returns {string} e.g., "19h"
+     */
+    formatTime(date) {
+        return `${date.getHours()}h`;
     }
-
-    const xmlDoc = new DOMParser().parseFromString(xmlText, 'text/xml');
-
-    // Check for XML parse errors
-    const parseError = xmlDoc.querySelector('parsererror');
-    if (parseError) {
-        console.error('[vrijeme] XML parse error:', parseError.textContent);
-        throw new Error('XML parse error');
-    }
-
-    const measurementTime = extractDhmzMeasurementTime(xmlDoc);
-    return extractDhmzStations(xmlDoc, measurementTime);
-}
-
-/**
- * Extracts measurement timestamp from DHMZ XML.
- * @param {Document} xmlDoc
- * @returns {Date|null}
- */
-function extractDhmzMeasurementTime(xmlDoc) {
-    const datumTermin = xmlDoc.querySelector('DatumTermin');
-    if (!datumTermin) return null;
-
-    const datum = datumTermin.querySelector('Datum');
-    const termin = datumTermin.querySelector('Termin');
-
-    if (datum && termin) {
-        // Datum format: "DD.MM.YYYY", Termin format: "HH"
-        const match = datum.textContent.trim().match(/(\d{2})\.(\d{2})\.(\d{4})/);
-        if (!match) return null;
-        const [, day, month, year] = match;
-        const hour = parseInt(termin.textContent.trim(), 10);
-        return new Date(year, month - 1, day, hour);
-    }
-    return null;
-}
-
-/**
- * Extracts all stations from DHMZ XML.
- * @param {Document} xmlDoc
- * @param {Date|null} measurementTime
- * @returns {Object<string, StationData>}
- */
-function extractDhmzStations(xmlDoc, measurementTime) {
-    const stations = xmlDoc.querySelectorAll('Grad');
-    /** @type {Object<string, StationData>} */
-    const result = {};
-
-    stations.forEach(station => {
-        const nameEl = station.querySelector('GradIme');
-        if (!nameEl) return;
-
-        const name = nameEl.textContent.trim();
-        const lat = parseFloat(station.querySelector('Lat')?.textContent);
-        const lon = parseFloat(station.querySelector('Lon')?.textContent);
-        const data = station.querySelector('Podatci');
-        if (!data) return;
-
-        const temp = data.querySelector('Temp');
-        const tempValue = temp?.textContent.trim();
-
-        // Skip if no valid temperature
-        if (!tempValue || tempValue === '-') return;
-
-        result[name] = {
-            name,
-            lat,
-            lon,
-            temperature: parseFloat(tempValue),
-            humidity: getNumberOrNull(data, 'Vlaga'),
-            pressure: getNumberOrNull(data, 'Tlak'),
-            pressureTrend: getNumberOrNull(data, 'TlakTend'),
-            windDirection: getTextOrNull(data, 'VjetarSmjer'),
-            windSpeed: getNumberOrNull(data, 'VjetarBrzina'),
-            condition: getTextOrNull(data, 'Vrijeme'),
-            measurementTime
-        };
-    });
-
-    return result;
-}
+};
 
 // =============================================================================
 // PLJUSAK PARSER (pljusak.com JavaScript array format)
@@ -437,255 +451,272 @@ function extractDhmzStations(xmlDoc, measurementTime) {
  *   ...  additional fields for precipitation, min/max temps, etc.
  */
 
-/** Pljusak.com data array indices */
-const PODACI = {
-    TYPE: 0,
-    NAME: 1,
-    LAT: 2,
-    LON: 3,
-    ELEVATION: 4,
-    TIME: 10,
-    TEMPERATURE: 12,
-    PRESSURE: 14,
-    PRESSURE_TREND: 15,
-    HUMIDITY: 16,
-    WIND_DIR: 17,
-    WIND_SPEED: 18,
-    DEWPOINT: 24
-};
-
 /**
- * Generates a weather description based on measured values.
- * Used for pljusak.com which doesn't provide condition text.
- *
- * @param {number} temp - Temperature in °C
- * @param {number|null} humidity - Relative humidity in %
- * @param {number|null} windSpeed - Wind speed in m/s
- * @param {number|null} dewpoint - Dewpoint temperature in °C
- * @returns {string} Weather description in Croatian
+ * PljusakParser - Parses weather data from pljusak.com JavaScript array format.
  */
-function generateWeatherDescription(temp, humidity, windSpeed, dewpoint) {
-    // Wind levels (m/s)
-    const isCalm = windSpeed === null || windSpeed < 3;
-    const hasBreeze = windSpeed !== null && windSpeed >= 3 && windSpeed < 6;
-    const isWindy = windSpeed !== null && windSpeed >= 6 && windSpeed < 11;
-    const isStrongWind = windSpeed !== null && windSpeed >= 11;
+const PljusakParser = {
+    /** Data array indices */
+    INDICES: {
+        TYPE: 0,
+        NAME: 1,
+        LAT: 2,
+        LON: 3,
+        ELEVATION: 4,
+        TIME: 10,
+        TEMPERATURE: 12,
+        PRESSURE: 14,
+        PRESSURE_TREND: 15,
+        HUMIDITY: 16,
+        WIND_DIR: 17,
+        WIND_SPEED: 18,
+        DEWPOINT: 24
+    },
 
-    // Fog: very strict - near-saturation, tight dewpoint spread, calm, cool temps.
-    // Real fog is rare; when uncertain, prefer non-fog descriptions.
-    const isFoggy = dewpoint !== null &&
-                    humidity !== null &&
-                    humidity >= 97 &&
-                    Math.abs(temp - dewpoint) <= 1 &&
-                    temp >= -3 && temp <= 15 &&
-                    isCalm;
+    /** Maximum age for readings - older stations are filtered out (12 hours) */
+    MAX_AGE_MS: 12 * 60 * 60 * 1000,
 
-    // Humidity feel (temperature-dependent)
-    const isMuggy = humidity !== null && humidity >= 65 && temp >= 26;
-    const isOppressive = humidity !== null && humidity >= 75 && temp >= 30;
-    const isDamp = humidity !== null && humidity >= 85 && temp < 12;
-    const isDry = humidity !== null && humidity < 30 && temp >= 25;
-
-    // Fog (rare)
-    if (isFoggy) {
-        return temp <= 0 ? 'ledena magla' : 'magla';
-    }
-
-    // Extreme heat (>= 36°C)
-    if (temp >= 36) {
-        if (isOppressive) return 'neizdrživa sparina';
-        if (isMuggy) return 'teška vrućina';
-        return 'žega';
-    }
-
-    // Hot (30-36°C)
-    if (temp >= 30) {
-        if (isOppressive) return 'sparina';
-        if (isMuggy) return 'sparno';
-        if (isDry) return 'suha vrućina';
-        if (isStrongWind) return 'vruće, jak vjetar';
-        return 'vruće';
-    }
-
-    // Warm (25-30°C)
-    if (temp >= 25) {
-        if (isMuggy) return 'toplo i sparno';
-        if (hasBreeze) return 'toplo uz povjetarac';
-        if (isWindy || isStrongWind) return 'toplo, vjetrovito';
-        return 'toplo';
-    }
-
-    // Pleasant (20-25°C)
-    if (temp >= 20) {
-        if (humidity !== null && humidity >= 75) return 'toplo i vlažno';
-        if (hasBreeze) return 'ugodno';
-        if (isWindy) return 'ugodno uz vjetar';
-        if (isStrongWind) return 'umjereno, vjetrovito';
-        return 'ugodna temperatura';
-    }
-
-    // Mild (15-20°C)
-    if (temp >= 15) {
-        if (isStrongWind) return 'svježe, jak vjetar';
-        if (isWindy) return 'svježe uz vjetar';
-        if (isDamp) return 'svježe i vlažno';
-        return 'svježe';
-    }
-
-    // Cool (10-15°C)
-    if (temp >= 10) {
-        if (isStrongWind) return 'hladan vjetar';
-        if (isWindy) return 'prohladno uz vjetar';
-        if (isDamp) return 'prohladno i vlažno';
-        return 'prohladno';
-    }
-
-    // Chilly (5-10°C)
-    if (temp >= 5) {
-        if (isStrongWind) return 'oštar vjetar';
-        if (isWindy) return 'hladno uz vjetar';
-        if (isDamp) return 'neugodna vlaga';
-        return 'prohladno';
-    }
-
-    // Cold (0-5°C)
-    if (temp >= 0) {
-        if (isStrongWind) return 'prodoran vjetar';
-        if (isWindy) return 'hladno, vjetrovito';
-        if (isDamp) return 'vlažna hladnoća';
-        return 'hladno';
-    }
-
-    // Freezing (-5 to 0°C)
-    if (temp >= -5) {
-        if (isStrongWind) return 'ledeno, oštar vjetar';
-        if (isWindy) return 'ledeno uz vjetar';
-        return 'ledeno';
-    }
-
-    // Very cold (-10 to -5°C)
-    if (temp >= -10) {
-        if (isWindy || isStrongWind) return 'vrlo ledeno uz vjetar';
-        return 'vrlo ledeno';
-    }
-
-    // Extreme cold (< -10°C)
-    if (isWindy || isStrongWind) return 'jaka studen';
-    return 'studen';
-}
-
-/**
- * Parses pljusak.com HTML response and returns station data.
- * @param {string} htmlText - Raw HTML response containing JavaScript
- * @returns {Object<string, StationData>}
- */
-function parsePljusakResponse(htmlText) {
-    // Extract the podaci array from the JavaScript
-    const podaciMatch = htmlText.match(/var\s+podaci\s*=\s*(\[[\s\S]*?\]);/);
-    if (!podaciMatch) {
-        console.error('[vrijeme] Could not find podaci array in response');
-        throw new Error('Invalid response format');
-    }
-
-    let podaci;
-    try {
-        podaci = JSON.parse(podaciMatch[1]);
-    } catch (e) {
-        console.error('[vrijeme] Failed to parse podaci array:', e);
-        throw new Error('Failed to parse weather data');
-    }
-
-    console.log('[vrijeme] Parsed', podaci.length, 'station entries');
-    return extractPljusakStations(podaci);
-}
-
-/**
- * Parses measurement time from pljusak.com format (HH:MM:SS).
- * @param {string|null} timeStr - Time string like "18:10:00"
- * @returns {Date|null}
- */
-function parsePljusakTime(timeStr) {
-    if (!timeStr || typeof timeStr !== 'string') return null;
-    const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-    if (!match) return null;
-
-    const now = new Date();
-    const hour = parseInt(match[1], 10);
-    const minute = parseInt(match[2], 10);
-
-    const measurementTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
-
-    // If measurement time is in the future, assume it's from yesterday
-    if (measurementTime > now) {
-        measurementTime.setDate(measurementTime.getDate() - 1);
-    }
-
-    return measurementTime;
-}
-
-/** Maximum age for pljusak.com readings - older stations are filtered out (12 hours) */
-const PLJUSAK_MAX_AGE_MS = 12 * 60 * 60 * 1000;
-
-/**
- * Extracts all stations from pljusak.com podaci array.
- * Filters out stations with readings older than 12 hours.
- * @param {Array[]} podaci - Array of station data arrays
- * @returns {Object<string, StationData>}
- */
-function extractPljusakStations(podaci) {
-    /** @type {Object<string, StationData>} */
-    const result = {};
-    const now = Date.now();
-    let staleCount = 0;
-
-    for (const entry of podaci) {
-        const name = entry[PODACI.NAME];
-        if (!name) continue;
-
-        const tempStr = entry[PODACI.TEMPERATURE];
-        // Skip if no valid temperature
-        if (tempStr === null || tempStr === undefined || tempStr === '-' || tempStr === '') continue;
-
-        const temperature = parseFloat(tempStr);
-        if (isNaN(temperature)) continue;
-
-        const lat = parseFloat(entry[PODACI.LAT]);
-        const lon = parseFloat(entry[PODACI.LON]);
-        if (!isFinite(lat) || !isFinite(lon)) continue;
-
-        const measurementTime = parsePljusakTime(entry[PODACI.TIME]);
-
-        // Filter out stations with stale readings (older than 12 hours)
-        if (!measurementTime || (now - measurementTime) > PLJUSAK_MAX_AGE_MS) {
-            staleCount++;
-            continue;
+    /**
+     * Parses pljusak.com HTML response and returns station data.
+     * @param {string} htmlText - Raw HTML response containing JavaScript
+     * @returns {Object<string, StationData>}
+     */
+    parse(htmlText) {
+        // Extract the podaci array from the JavaScript
+        const podaciMatch = htmlText.match(/var\s+podaci\s*=\s*(\[[\s\S]*?\]);/);
+        if (!podaciMatch) {
+            console.error('[vrijeme] Could not find podaci array in response');
+            throw new Error('Invalid response format');
         }
 
-        const humidity = parseNumberOrNull(entry[PODACI.HUMIDITY]);
-        const windSpeed = parseNumberOrNull(entry[PODACI.WIND_SPEED]);
-        const dewpoint = parseNumberOrNull(entry[PODACI.DEWPOINT]);
+        let podaci;
+        try {
+            podaci = JSON.parse(podaciMatch[1]);
+        } catch (e) {
+            console.error('[vrijeme] Failed to parse podaci array:', e);
+            throw new Error('Failed to parse weather data');
+        }
 
-        result[name] = {
-            name,
-            lat,
-            lon,
-            temperature,
-            humidity,
-            pressure: parseNumberOrNull(entry[PODACI.PRESSURE]),
-            pressureTrend: parseNumberOrNull(entry[PODACI.PRESSURE_TREND]),
-            windDirection: entry[PODACI.WIND_DIR] || null,
-            windSpeed,
-            condition: generateWeatherDescription(temperature, humidity, windSpeed, dewpoint),
-            measurementTime
-        };
+        console.log('[vrijeme] Parsed', podaci.length, 'station entries');
+        return this.extractStations(podaci);
+    },
+
+    /**
+     * Parses measurement time from pljusak.com format (HH:MM:SS).
+     * @param {string|null} timeStr - Time string like "18:10:00"
+     * @returns {Date|null}
+     */
+    parseTime(timeStr) {
+        if (!timeStr || typeof timeStr !== 'string') return null;
+        const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+        if (!match) return null;
+
+        const now = new Date();
+        const hour = parseInt(match[1], 10);
+        const minute = parseInt(match[2], 10);
+
+        const measurementTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+
+        // If measurement time is in the future, assume it's from yesterday
+        if (measurementTime > now) {
+            measurementTime.setDate(measurementTime.getDate() - 1);
+        }
+
+        return measurementTime;
+    },
+
+    /**
+     * Extracts all stations from pljusak.com podaci array.
+     * Filters out stations with readings older than 12 hours.
+     * @param {Array[]} podaci - Array of station data arrays
+     * @returns {Object<string, StationData>}
+     */
+    extractStations(podaci) {
+        const I = this.INDICES;
+        /** @type {Object<string, StationData>} */
+        const result = {};
+        const now = Date.now();
+        let staleCount = 0;
+
+        for (const entry of podaci) {
+            const name = entry[I.NAME];
+            if (!name) continue;
+
+            const tempStr = entry[I.TEMPERATURE];
+            // Skip if no valid temperature
+            if (tempStr === null || tempStr === undefined || tempStr === '-' || tempStr === '') continue;
+
+            const temperature = parseFloat(tempStr);
+            if (isNaN(temperature)) continue;
+
+            const lat = parseFloat(entry[I.LAT]);
+            const lon = parseFloat(entry[I.LON]);
+            if (!isFinite(lat) || !isFinite(lon)) continue;
+
+            const measurementTime = this.parseTime(entry[I.TIME]);
+
+            // Filter out stations with stale readings (older than 12 hours)
+            if (!measurementTime || (now - measurementTime) > this.MAX_AGE_MS) {
+                staleCount++;
+                continue;
+            }
+
+            const humidity = parseNumberOrNull(entry[I.HUMIDITY]);
+            const windSpeed = parseNumberOrNull(entry[I.WIND_SPEED]);
+            const dewpoint = parseNumberOrNull(entry[I.DEWPOINT]);
+
+            result[name] = {
+                name,
+                lat,
+                lon,
+                temperature,
+                humidity,
+                pressure: parseNumberOrNull(entry[I.PRESSURE]),
+                pressureTrend: parseNumberOrNull(entry[I.PRESSURE_TREND]),
+                windDirection: entry[I.WIND_DIR] || null,
+                windSpeed,
+                condition: this.generateDescription(temperature, humidity, windSpeed, dewpoint),
+                measurementTime
+            };
+        }
+
+        if (staleCount > 0) {
+            console.log('[vrijeme] Filtered out', staleCount, 'stations with readings older than 12h');
+        }
+
+        return result;
+    },
+
+    /**
+     * Generates a weather description based on measured values.
+     * Used because pljusak.com doesn't provide condition text.
+     *
+     * @param {number} temp - Temperature in °C
+     * @param {number|null} humidity - Relative humidity in %
+     * @param {number|null} windSpeed - Wind speed in m/s
+     * @param {number|null} dewpoint - Dewpoint temperature in °C
+     * @returns {string} Weather description in Croatian
+     */
+    generateDescription(temp, humidity, windSpeed, dewpoint) {
+        // Wind levels (m/s)
+        const isCalm = windSpeed === null || windSpeed < 3;
+        const hasBreeze = windSpeed !== null && windSpeed >= 3 && windSpeed < 6;
+        const isWindy = windSpeed !== null && windSpeed >= 6 && windSpeed < 11;
+        const isStrongWind = windSpeed !== null && windSpeed >= 11;
+
+        // Fog: very strict - near-saturation, tight dewpoint spread, calm, cool temps.
+        // Real fog is rare; when uncertain, prefer non-fog descriptions.
+        const isFoggy = dewpoint !== null &&
+                        humidity !== null &&
+                        humidity >= 97 &&
+                        Math.abs(temp - dewpoint) <= 1 &&
+                        temp >= -3 && temp <= 15 &&
+                        isCalm;
+
+        // Humidity feel (temperature-dependent)
+        const isMuggy = humidity !== null && humidity >= 65 && temp >= 26;
+        const isOppressive = humidity !== null && humidity >= 75 && temp >= 30;
+        const isDamp = humidity !== null && humidity >= 85 && temp < 12;
+        const isDry = humidity !== null && humidity < 30 && temp >= 25;
+
+        // Fog (rare)
+        if (isFoggy) {
+            return temp <= 0 ? 'ledena magla' : 'magla';
+        }
+
+        // Extreme heat (>= 36°C)
+        if (temp >= 36) {
+            if (isOppressive) return 'neizdrživa sparina';
+            if (isMuggy) return 'teška vrućina';
+            return 'žega';
+        }
+
+        // Hot (30-36°C)
+        if (temp >= 30) {
+            if (isOppressive) return 'sparina';
+            if (isMuggy) return 'sparno';
+            if (isDry) return 'suha vrućina';
+            if (isStrongWind) return 'vruće, jak vjetar';
+            return 'vruće';
+        }
+
+        // Warm (25-30°C)
+        if (temp >= 25) {
+            if (isMuggy) return 'toplo i sparno';
+            if (hasBreeze) return 'toplo uz povjetarac';
+            if (isWindy || isStrongWind) return 'toplo, vjetrovito';
+            return 'toplo';
+        }
+
+        // Pleasant (20-25°C)
+        if (temp >= 20) {
+            if (humidity !== null && humidity >= 75) return 'toplo i vlažno';
+            if (hasBreeze) return 'ugodno';
+            if (isWindy) return 'ugodno uz vjetar';
+            if (isStrongWind) return 'umjereno, vjetrovito';
+            return 'ugodna temperatura';
+        }
+
+        // Mild (15-20°C)
+        if (temp >= 15) {
+            if (isStrongWind) return 'svježe, jak vjetar';
+            if (isWindy) return 'svježe uz vjetar';
+            if (isDamp) return 'svježe i vlažno';
+            return 'svježe';
+        }
+
+        // Cool (10-15°C)
+        if (temp >= 10) {
+            if (isStrongWind) return 'hladan vjetar';
+            if (isWindy) return 'prohladno uz vjetar';
+            if (isDamp) return 'prohladno i vlažno';
+            return 'prohladno';
+        }
+
+        // Chilly (5-10°C)
+        if (temp >= 5) {
+            if (isStrongWind) return 'oštar vjetar';
+            if (isWindy) return 'hladno uz vjetar';
+            if (isDamp) return 'neugodna vlaga';
+            return 'prohladno';
+        }
+
+        // Cold (0-5°C)
+        if (temp >= 0) {
+            if (isStrongWind) return 'prodoran vjetar';
+            if (isWindy) return 'hladno, vjetrovito';
+            if (isDamp) return 'vlažna hladnoća';
+            return 'hladno';
+        }
+
+        // Freezing (-5 to 0°C)
+        if (temp >= -5) {
+            if (isStrongWind) return 'ledeno, oštar vjetar';
+            if (isWindy) return 'ledeno uz vjetar';
+            return 'ledeno';
+        }
+
+        // Very cold (-10 to -5°C)
+        if (temp >= -10) {
+            if (isWindy || isStrongWind) return 'vrlo ledeno uz vjetar';
+            return 'vrlo ledeno';
+        }
+
+        // Extreme cold (< -10°C)
+        if (isWindy || isStrongWind) return 'jaka studen';
+        return 'studen';
+    },
+
+    /**
+     * Formats measurement time for display (minute precision).
+     * @param {Date} date
+     * @returns {string} e.g., "19:05"
+     */
+    formatTime(date) {
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${minutes}`;
     }
-
-    if (staleCount > 0) {
-        console.log('[vrijeme] Filtered out', staleCount, 'stations with readings older than 12h');
-    }
-
-    return result;
-}
+};
 
 /**
  * Parses a string value as a number, or returns null if invalid.
@@ -1344,18 +1375,10 @@ function formatMeasurementTime(measurementTime) {
 
     const ageMs = Date.now() - measurementTime;
 
-    let formattedTime;
-    if (ageMs > OLD_THRESHOLD_MS) {
-        formattedTime = 'staro';
-    } else if (DATA_SOURCE === 'pljusak') {
-        // Pljusak has minute precision, show HH:MM
-        const hours = measurementTime.getHours().toString().padStart(2, '0');
-        const minutes = measurementTime.getMinutes().toString().padStart(2, '0');
-        formattedTime = `${hours}:${minutes}`;
-    } else {
-        // DHMZ only has hour precision, show "19h"
-        formattedTime = `${measurementTime.getHours()}h`;
-    }
+    // Use source-specific time formatting, or "staro" if too old
+    const formattedTime = ageMs > OLD_THRESHOLD_MS
+        ? 'staro'
+        : getSourceConfig().parser.formatTime(measurementTime);
 
     return {
         formattedTime,
