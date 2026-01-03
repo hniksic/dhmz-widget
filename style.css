@@ -403,8 +403,12 @@ body {
     z-index: 100;
 }
 
-/* On touch devices, open dropdown to the left (less room on right edge) */
+/* On touch devices, larger arrow and dropdown opens to the left */
 @media (pointer: coarse) {
+    .location-trigger {
+        font-size: 1.5rem;
+    }
+
     .location-dropdown {
         left: auto;
         right: 0;
