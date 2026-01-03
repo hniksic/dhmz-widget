@@ -141,6 +141,31 @@ body {
     }
 }
 
+.map-source {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    padding: 4px 8px;
+    z-index: 10;
+}
+
+.map-source:hover {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.map-source:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 .map-close {
     position: absolute;
     top: 12px;

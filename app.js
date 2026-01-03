@@ -1029,12 +1029,13 @@ LocationPicker.init();
  * - Otherwise: uses old station's coordinates to find nearest in new source
  */
 const SourceSwitcher = {
-    /** Update the button text to show current source */
+    /** Update button labels to show current source (widget and map) */
     updateLabel() {
+        const label = getSourceConfig().label;
         const btn = document.getElementById('source-trigger');
-        if (btn) {
-            btn.textContent = getSourceConfig().label;
-        }
+        if (btn) btn.textContent = label;
+        const mapBtn = document.getElementById('map-source');
+        if (mapBtn) mapBtn.textContent = label;
     },
 
     /** Toggle to the other source and reload data */
@@ -2081,6 +2082,15 @@ const StationMap = {
             if (self.isDragging()) return;
             if (e.target.id === 'map-modal') self.closeModal();
         });
+
+        // Source switcher in map
+        const sourceBtn = document.getElementById('map-source');
+        if (sourceBtn) {
+            sourceBtn.addEventListener('click', async () => {
+                await SourceSwitcher.toggle();
+                self.renderStations();
+            });
+        }
 
         // Keyboard
         document.addEventListener('keydown', (e) => {
