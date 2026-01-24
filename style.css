@@ -357,6 +357,31 @@ body {
     border-radius: 4px;
 }
 
+/* Forecast link - hidden until URL is resolved */
+.forecast-link {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    visibility: hidden;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 0.75rem;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.forecast-link:hover {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.forecast-link:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 .location-picker {
     position: absolute;
     top: 20px;

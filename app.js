@@ -86,6 +86,121 @@ function getSourceConfig() {
 /** CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers) */
 const PROXY_URL = 'https://corsproxy.io/?';
 
+// =============================================================================
+// YR.NO FORECAST LINK
+// =============================================================================
+
+/** Cache for yr.no location URLs (coordinate key -> URL) */
+const yrnoUrlCache = new Map();
+
+/** Maximum distance (in degrees, ~10km) to accept a yr.no location match */
+const YRNO_MAX_DISTANCE = 0.1;
+
+/**
+ * Searches yr.no for a location name and returns the closest match to given coordinates.
+ * @param {string} query - Search query
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<{id: string, dist: number} | null>}
+ */
+async function searchYrnoLocation(query, lat, lon) {
+    try {
+        const apiUrl = `${PROXY_URL}${encodeURIComponent(`https://www.yr.no/api/v0/locations/Search?q=${query}&language=en`)}`;
+        const response = await fetch(apiUrl);
+        if (response.ok) {
+            const data = await response.json();
+            const locations = data?._embedded?.location;
+            if (locations?.length > 0) {
+                let closest = null;
+                let minDist = Infinity;
+                for (const loc of locations) {
+                    if (loc.id && loc.position) {
+                        const dist = Math.hypot(loc.position.lat - lat, loc.position.lon - lon);
+                        if (dist < minDist) {
+                            minDist = dist;
+                            closest = loc;
+                        }
+                    }
+                }
+                if (closest) {
+                    return { id: closest.id, dist: minDist };
+                }
+            }
+        }
+    } catch (e) {
+        // Ignore errors, will fall back to coordinate URL
+    }
+    return null;
+}
+
+/**
+ * Reverse geocodes coordinates using Nominatim to get a place name.
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<string | null>} City/town name or null
+ */
+async function reverseGeocode(lat, lon) {
+    try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`;
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'dhmz-widget/1.0' }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            // Prefer city, then town, then village, then county
+            let place = data.address?.city || data.address?.town || data.address?.village || data.address?.county || null;
+            // Strip common prefixes like "City of " that Nominatim adds
+            if (place) {
+                place = place.replace(/^City of /i, '');
+            }
+            return place;
+        }
+    } catch (e) {
+        // Ignore errors, will fall back to coordinate URL
+    }
+    return null;
+}
+
+/**
+ * Fetches the yr.no forecast URL for given coordinates.
+ *
+ * yr.no doesn't support reverse geocoding (search by coordinates), so we use
+ * Nominatim to get the place name, then search yr.no and pick the result closest
+ * to our coordinates. This ensures we link to a named location page (clean layout)
+ * rather than a coordinate-based page (shows a large map). We only use the search
+ * result if it's very close (~5km) to avoid linking to a wrong location.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<string>}
+ */
+async function getYrnoForecastUrl(lat, lon) {
+    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    if (yrnoUrlCache.has(cacheKey)) {
+        return yrnoUrlCache.get(cacheKey);
+    }
+
+    // Fallback: coordinate-based URL works but shows a large map at the top
+    const fallbackUrl = `https://www.yr.no/en/forecast/daily-table/${cacheKey}`;
+
+    // Use Nominatim to get place name from coordinates
+    const placeName = await reverseGeocode(lat, lon);
+    if (placeName) {
+        const result = await searchYrnoLocation(placeName, lat, lon);
+        // Only use if close enough (~10km) to avoid linking to a different place
+        if (result && result.dist < YRNO_MAX_DISTANCE) {
+            const url = `https://www.yr.no/en/forecast/daily-table/${result.id}`;
+            console.log('[yr.no] Resolved', placeName, '→', url);
+            yrnoUrlCache.set(cacheKey, url);
+            return url;
+        }
+    }
+
+    console.log('[yr.no] Using fallback URL for', cacheKey);
+    yrnoUrlCache.set(cacheKey, fallbackUrl);
+    return fallbackUrl;
+}
+
 /** Special location that uses geolocation to find nearest station */
 const NEAREST_LOCATION = 'Najbliža';
 
@@ -1334,6 +1449,20 @@ function render(station, distance) {
         const dir = (station.windDirection && station.windDirection !== 'C') ? ` ${station.windDirection}` : '';
         setText('wind', `${station.windSpeed} m/s${dir}`);
         document.getElementById('wind-container').classList.remove('empty');
+    }
+
+    // Update yr.no forecast link (reverse geocode coordinates, search yr.no)
+    const forecastLink = document.getElementById('forecast-link');
+    if (forecastLink) {
+        forecastLink.style.visibility = 'hidden';
+        const lat = station.lat;
+        const lon = station.lon;
+        if (isFinite(lat) && isFinite(lon)) {
+            getYrnoForecastUrl(lat, lon).then(url => {
+                forecastLink.href = url;
+                forecastLink.style.visibility = 'visible';
+            });
+        }
     }
 
     show('weather');
