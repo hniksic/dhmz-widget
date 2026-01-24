@@ -93,8 +93,8 @@ const PROXY_URL = 'https://corsproxy.io/?';
 /** Cache for yr.no location URLs (coordinate key -> URL) */
 const yrnoUrlCache = new Map();
 
-/** Maximum distance (in degrees, ~10km) to accept a yr.no location match */
-const YRNO_MAX_DISTANCE = 0.1;
+/** Maximum distance (in degrees, ~5km) to accept a yr.no location match */
+const YRNO_MAX_DISTANCE = 0.05;
 
 /**
  * Searches yr.no for a location name and returns the closest match to given coordinates.
@@ -137,23 +137,43 @@ async function searchYrnoLocation(query, lat, lon) {
  * Reverse geocodes coordinates using Nominatim to get a place name.
  * @param {number} lat
  * @param {number} lon
- * @returns {Promise<string | null>} City/town name or null
+ * @returns {Promise<string[] | null>} Array of progressively shorter location queries, or null
  */
 async function reverseGeocode(lat, lon) {
     try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`;
+        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`;
         const response = await fetch(url, {
             headers: { 'User-Agent': 'dhmz-widget/1.0' }
         });
         if (response.ok) {
             const data = await response.json();
-            // Prefer city, then town, then village, then county
-            let place = data.address?.city || data.address?.town || data.address?.village || data.address?.county || null;
-            // Strip common prefixes like "City of " that Nominatim adds
-            if (place) {
-                place = place.replace(/^City of /i, '');
+            const addr = data.address;
+            if (!addr) return null;
+
+            // Nominatim returns different fields for cities vs towns:
+            // - Cities (e.g., Zagreb): quarter, suburb, city_district, city
+            // - Towns (e.g., Daruvar): neighbourhood, quarter, town, municipality
+            // We collect all fields that might be present, from most specific to most general.
+            // See: https://nominatim.org/release-docs/latest/api/Output/
+            const parts = [
+                addr.neighbourhood,
+                addr.quarter,
+                addr.suburb,
+                addr.city_district,
+                addr.city || addr.town || addr.village,
+                addr.municipality,
+            ].filter(Boolean);
+
+            if (parts.length < 2) return null;
+
+            // Generate queries from full to minimal, dropping the most specific part each time.
+            // Stop at 2 parts - single-part queries rarely succeed if 2-part ones failed.
+            // Example: ["Kantari, Daruvar, Grad Daruvar", "Daruvar, Grad Daruvar"]
+            const queries = [];
+            for (let i = 0; i < parts.length - 1; i++) {
+                queries.push(parts.slice(i).join(', '));
             }
-            return place;
+            return queries.length > 0 ? queries : null;
         }
     } catch (e) {
         // Ignore errors, will fall back to coordinate URL
@@ -165,16 +185,20 @@ async function reverseGeocode(lat, lon) {
  * Fetches the yr.no forecast URL for given coordinates.
  *
  * yr.no doesn't support reverse geocoding (search by coordinates), so we use
- * Nominatim to get the place name, then search yr.no and pick the result closest
- * to our coordinates. This ensures we link to a named location page (clean layout)
- * rather than a coordinate-based page (shows a large map). We only use the search
- * result if it's very close (~5km) to avoid linking to a wrong location.
+ * two parallel search strategies and pick the closer result:
+ * 1. Nominatim reverse geocoding → try queries on yr.no until first match
+ * 2. Direct yr.no search using the station name
+ *
+ * This ensures we link to a named location page (clean layout) rather than a
+ * coordinate-based page (shows a large map). We only use the search result if
+ * it's very close (~5km) to avoid linking to a wrong location.
  *
  * @param {number} lat
  * @param {number} lon
+ * @param {string | null} [stationName] - Station name for parallel search
  * @returns {Promise<string>}
  */
-async function getYrnoForecastUrl(lat, lon) {
+async function getYrnoForecastUrl(lat, lon, stationName = null) {
     const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
     if (yrnoUrlCache.has(cacheKey)) {
         return yrnoUrlCache.get(cacheKey);
@@ -183,17 +207,62 @@ async function getYrnoForecastUrl(lat, lon) {
     // Fallback: coordinate-based URL works but shows a large map at the top
     const fallbackUrl = `https://www.yr.no/en/forecast/daily-table/${cacheKey}`;
 
-    // Use Nominatim to get place name from coordinates
-    const placeName = await reverseGeocode(lat, lon);
-    if (placeName) {
-        const result = await searchYrnoLocation(placeName, lat, lon);
-        // Only use if close enough (~10km) to avoid linking to a different place
-        if (result && result.dist < YRNO_MAX_DISTANCE) {
-            const url = `https://www.yr.no/en/forecast/daily-table/${result.id}`;
-            console.log('[yr.no] Resolved', placeName, '→', url);
-            yrnoUrlCache.set(cacheKey, url);
-            return url;
+    // Helper: search Nominatim then try yr.no queries until first match
+    async function searchViaNominatim() {
+        const queries = await reverseGeocode(lat, lon);
+        if (!queries) {
+            console.log('[yr.no] Nominatim returned no address for', cacheKey);
+            return null;
         }
+        for (const query of queries) {
+            const result = await searchYrnoLocation(query, lat, lon);
+            if (result) {
+                console.log('[yr.no] Nominatim query', query, '→ dist=' + result.dist.toFixed(4));
+                return { ...result, query };
+            }
+        }
+        console.log('[yr.no] No yr.no match for Nominatim queries');
+        return null;
+    }
+
+    // Helper: search yr.no directly with station name
+    // Try full name first, then just the part before comma (e.g. "Golubić, brana" → "Golubić")
+    async function searchViaStationName() {
+        if (!stationName) return null;
+        const result = await searchYrnoLocation(stationName, lat, lon);
+        if (result) {
+            console.log('[yr.no] Station name', stationName, '→ dist=' + result.dist.toFixed(4));
+            return { ...result, query: stationName };
+        }
+        // Try the part before comma (handles "Golubić, brana", "Grmeč, Crni vrh", etc.)
+        const commaIdx = stationName.indexOf(',');
+        if (commaIdx > 0) {
+            const shortName = stationName.substring(0, commaIdx).trim();
+            const shortResult = await searchYrnoLocation(shortName, lat, lon);
+            if (shortResult) {
+                console.log('[yr.no] Station short name', shortName, '→ dist=' + shortResult.dist.toFixed(4));
+                return { ...shortResult, query: shortName };
+            }
+        }
+        console.log('[yr.no] No yr.no match for station name', stationName);
+        return null;
+    }
+
+    // Run both searches in parallel, pick closer result
+    const [nominatimResult, stationResult] = await Promise.all([
+        searchViaNominatim(),
+        searchViaStationName(),
+    ]);
+
+    const best = [nominatimResult, stationResult]
+        .filter(Boolean)
+        .sort((a, b) => a.dist - b.dist)[0];
+
+    if (best && best.dist < YRNO_MAX_DISTANCE) {
+        const url = `https://www.yr.no/en/forecast/daily-table/${best.id}`;
+        console.log('[yr.no] Resolved', best.query, '→', url);
+        yrnoUrlCache.set(cacheKey, url);
+        return url;
     }
 
     console.log('[yr.no] Using fallback URL for', cacheKey);
@@ -1458,10 +1527,16 @@ function render(station, distance) {
         const lat = station.lat;
         const lon = station.lon;
         if (isFinite(lat) && isFinite(lon)) {
-            getYrnoForecastUrl(lat, lon).then(url => {
-                forecastLink.href = url;
-                forecastLink.style.visibility = 'visible';
+            getYrnoForecastUrl(lat, lon, station.name).then(url => {
+                // Check if we're still showing the same station (user may have switched)
+                if (forecastLink.dataset.lat === String(lat) && forecastLink.dataset.lon === String(lon)) {
+                    forecastLink.href = url;
+                    forecastLink.style.visibility = 'visible';
+                }
             });
+            // Store the coordinates we're fetching for
+            forecastLink.dataset.lat = String(lat);
+            forecastLink.dataset.lon = String(lon);
         }
     }
 
