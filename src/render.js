@@ -6,11 +6,16 @@
 
 import {
     getSourceConfig, cachedStations, STALE_THRESHOLD_MS, OLD_THRESHOLD_MS,
-    DISTANCE_WARNING_THRESHOLD, NEAREST_LOCATION,
+    DISTANCE_WARNING_THRESHOLD, NEAREST_LOCATION, DATA_SOURCE,
     getSelectedLocation, setSelectedLocation
 } from './config.js';
 import { Geolocation, getStationForLocation, getYrnoForecastUrl } from './geo.js';
 import { hide, show, setText, LocationPicker } from './ui.js';
+import { fetchWeatherCode } from './openmeteo.js';
+import { generateWeatherDescription } from './nlg.js';
+
+/** Counter to track render operations for race condition prevention */
+let renderGeneration = 0;
 
 // =============================================================================
 // STATION NAME PARSING
@@ -74,10 +79,14 @@ function formatMeasurementTime(measurementTime) {
 
 /**
  * Renders weather data to the widget.
+ * Fetches weather code from Open-Meteo for enhanced condition descriptions.
  * @param {StationData} station
  * @param {number|null} distance - Distance to station in km (only for "nearest" mode)
  */
-function render(station, distance) {
+async function render(station, distance) {
+    // Increment render generation to invalidate any pending async operations
+    const thisRender = ++renderGeneration;
+
     hide('error');
     hide('status');
 
@@ -117,12 +126,33 @@ function render(station, distance) {
         distanceWarning.hidden = true;
     }
 
-    if (station.condition) {
-        setText('condition', station.condition.charAt(0).toUpperCase() + station.condition.slice(1));
+    // Display initial condition (may be updated later with weather code)
+    let condition = station.condition;
+    if (condition) {
+        setText('condition', condition.charAt(0).toUpperCase() + condition.slice(1));
     } else {
         setText('condition', '—');
     }
     show('condition-container');
+
+    // For pljusak.com stations, fetch weather code for enhanced NLG descriptions.
+    // Open-Meteo is fetched in the background and only used for the condition text.
+    // The numbers (temperature, humidity, etc.) are solely from pljusak.com/DHMZ.
+    // This is done after initial render to avoid delaying the UI.
+    if (DATA_SOURCE === 'pljusak' && isFinite(station.lat) && isFinite(station.lon)) {
+        const weatherCode = await fetchWeatherCode(station.lat, station.lon);
+        // Guard against race condition: only update if this is still the active render
+        if (weatherCode !== null && thisRender === renderGeneration) {
+            condition = generateWeatherDescription(
+                station.temperature,
+                station.humidity,
+                station.windSpeed,
+                null,
+                weatherCode
+            );
+            setText('condition', condition.charAt(0).toUpperCase() + condition.slice(1));
+        }
+    }
 
     if (station.humidity !== null) {
         setText('humidity', station.humidity);
@@ -192,8 +222,9 @@ function renderStatus(message, showCancel = true) {
 
 /**
  * Renders the currently selected station from cached data.
+ * Async to support weather code fetching for pljusak.com stations.
  */
-export function renderSelectedStation() {
+export async function renderSelectedStation() {
     if (!cachedStations) return;
 
     const stationNames = Object.keys(cachedStations);
@@ -237,5 +268,5 @@ export function renderSelectedStation() {
     }
 
     console.log('[vrijeme] Displaying:', result.station.name, result.station.temperature + '°C');
-    render(result.station, result.distance);
+    await render(result.station, result.distance);
 }

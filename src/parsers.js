@@ -360,10 +360,11 @@ export const PljusakParser = {
      * @param {number|null} humidity - Relative humidity in %
      * @param {number|null} windSpeed - Wind speed in m/s
      * @param {number|null} dewpoint - Dewpoint temperature in °C
+     * @param {number|null} [weatherCode=null] - WMO weather code (optional, for enhanced descriptions)
      * @returns {string} Weather description in Croatian
      */
-    generateDescription(temp, humidity, windSpeed, dewpoint) {
-        return generateWeatherDescription(temp, humidity, windSpeed, dewpoint);
+    generateDescription(temp, humidity, windSpeed, dewpoint, weatherCode = null) {
+        return generateWeatherDescription(temp, humidity, windSpeed, dewpoint, weatherCode);
     },
 
     /**
