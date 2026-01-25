@@ -6,11 +6,11 @@ const watch = process.argv.includes('--watch');
 // Ensure dist exists
 mkdirSync('dist', { recursive: true });
 
-// Copy static assets
+// Copy static assets from public/
 const assets = ['index.html', 'style.css', 'sw.js', 'manifest.json',
                 'icon.svg', 'icon-192.png', 'icon-512.png'];
 for (const file of assets) {
-  cpSync(file, `dist/${file}`);
+  cpSync(`public/${file}`, `dist/${file}`);
 }
 
 // Build bundle
