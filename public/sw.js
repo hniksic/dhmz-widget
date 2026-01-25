@@ -1,102 +1,85 @@
 /*
- * Service Worker for Zagreb Temperature PWA
+ * Service Worker for Weather Widget PWA
  *
  * Purpose:
  * - Makes the app "installable" on mobile (required by PWA spec)
  * - Caches static assets for offline use and faster loads
  *
  * Caching strategy:
- * - HTML/JS/CSS: Network-first, fall back to cache if offline
- *   (ensures updates are visible immediately on reload)
- * - Images: Cache-first, fall back to network
- *   (these change rarely, so prefer speed)
+ * - Hashed JS files (app-XXX.js, outlines-XXX.js): Cache forever (immutable)
+ * - HTML/CSS/icons: Network-first, fall back to cache if offline
  * - Weather API: Never cached (always need fresh data)
  *
- * Cache versioning:
- * - CACHE_NAME includes version number
- * - When version changes, old cache is deleted on activation
- * - Bump version whenever deploying changes to cached files
+ * No manual versioning needed:
+ * - JS files have content hashes in their names - new builds = new URLs
+ * - Cache is cleaned up when activating: old hashed files are removed
  */
 
-const CACHE_NAME = 'zagreb-temp-v63';
+const CACHE_NAME = 'app-cache';
 
-const ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './bundle.js',
-  './icon.svg',
-  './icon-192.png',
-  './icon-512.png'
-];
-
-/*
- * Install event: fired when browser detects a new service worker.
- * We pre-cache all static assets so they're available offline.
- */
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS))
-  );
-  // skipWaiting() makes this SW activate immediately instead of waiting
-  // for all tabs using the old SW to close.
-  self.skipWaiting();
-});
-
-/*
- * Activate event: fired when the new service worker takes over.
- * We delete old caches to free space and avoid serving stale content.
- */
+// Skip waiting and claim clients immediately
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(k => k !== CACHE_NAME)  // Keep only current cache
-          .map(k => caches.delete(k))      // Delete all others
-      )
-    )
+    caches.open(CACHE_NAME).then(async cache => {
+      // Clean up old hashed JS files that are no longer referenced
+      const keys = await cache.keys();
+      const toDelete = keys.filter(req => {
+        const url = req.url;
+        // Keep only the latest hashed files (they'll be re-cached on fetch)
+        return url.match(/\/(app|outlines)-[A-Z0-9]+\.js$/);
+      });
+      await Promise.all(toDelete.map(req => cache.delete(req)));
+    })
   );
-  // clients.claim() makes this SW control all open tabs immediately,
-  // instead of waiting for them to reload.
   self.clients.claim();
 });
 
 /*
- * Fetch event: fired for every network request from controlled pages.
- * We intercept requests and decide whether to serve from cache or network.
+ * Fetch event: intercept requests and apply caching strategy.
  */
 self.addEventListener('fetch', event => {
   const url = event.request.url;
 
-  // Weather API: always fetch from network, never cache
-  if (url.includes('corsproxy') || url.includes('allorigins') || url.includes('vrijeme.hr') || url.includes('pljusak.com')) {
+  // Weather API and proxies: always fetch from network, never cache
+  if (url.includes('corsproxy') || url.includes('allorigins') ||
+      url.includes('vrijeme.hr') || url.includes('pljusak.com') ||
+      url.includes('open-meteo.com')) {
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // HTML, JS, CSS: network-first strategy
-  // Try network, update cache, fall back to cache if offline
-  if (url.endsWith('.html') || url.endsWith('.js') || url.endsWith('.css') || url.endsWith('/')) {
+  // Hashed JS files: cache forever (immutable content)
+  if (url.match(/\/(app|outlines)-[A-Z0-9]+\.js$/)) {
     event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          // Got fresh response - update cache for offline use
+      caches.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(response => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
           return response;
-        })
-        .catch(() => {
-          // Network failed (offline) - try to serve from cache
-          return caches.match(event.request);
-        })
+        });
+      })
     );
     return;
   }
 
-  // Everything else (images): cache-first strategy
-  // Serve from cache if available, otherwise fetch from network
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
-  );
+  // HTML, CSS, icons: network-first with cache fallback
+  if (url.endsWith('.html') || url.endsWith('.css') || url.endsWith('.js') ||
+      url.endsWith('.svg') || url.endsWith('.png') || url.endsWith('.json') ||
+      url.endsWith('/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Everything else: network only
+  event.respondWith(fetch(event.request));
 });

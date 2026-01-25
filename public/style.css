@@ -125,20 +125,20 @@ body {
 
     /* Smaller circles on large screens (they scale with viewBox) */
     .station-dot {
-        r: 3;
+        r: 0.5;
     }
 
     .station-dot.prehighlight,
     .station-dot.tapped {
-        r: 5;
+        r: 0.8;
     }
 
     .user-dot {
-        r: 3;
+        r: 0.5;
     }
 
     .user-dot-pulse {
-        r: 3;
+        r: 0.5;
     }
 }
 
@@ -199,7 +199,14 @@ body {
 
 #croatia-outline path {
     fill: rgba(255, 255, 255, 0.08);
-    stroke: rgba(255, 255, 255, 0.2);
+    stroke: #464655;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+#neighbor-outlines path {
+    fill: none;
+    stroke: #3a3a48;
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
 }

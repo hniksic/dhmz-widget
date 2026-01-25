@@ -32,3 +32,11 @@ export function log(...args) {
 export function warn(...args) {
     console.warn(`[${timestamp()}]`, ...args);
 }
+
+/**
+ * Log an error message with timestamp.
+ * @param {...any} args
+ */
+export function error(...args) {
+    console.error(`[${timestamp()}]`, ...args);
+}

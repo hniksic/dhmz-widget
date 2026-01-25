@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { cpSync, mkdirSync } from 'fs';
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 const watch = process.argv.includes('--watch');
 
@@ -7,11 +7,14 @@ const watch = process.argv.includes('--watch');
 mkdirSync('dist', { recursive: true });
 
 // Copy static assets from public/
-const assets = ['index.html', 'style.css', 'sw.js', 'manifest.json',
+const assets = ['style.css', 'sw.js', 'manifest.json',
                 'icon.svg', 'icon-192.png', 'icon-512.png'];
 for (const file of assets) {
   cpSync(`public/${file}`, `dist/${file}`);
 }
+
+// Copy index.html (no SVG injection needed - outlines are in JS module)
+cpSync('public/index.html', 'dist/index.html');
 
 // Build bundle
 const ctx = await esbuild.context({
@@ -19,7 +22,7 @@ const ctx = await esbuild.context({
   bundle: true,
   outfile: 'dist/bundle.js',
   format: 'iife',
-  minify: true,
+  minify: !watch,
 });
 
 if (watch) {
