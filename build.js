@@ -19,6 +19,7 @@ const ctx = await esbuild.context({
   bundle: true,
   outfile: 'dist/bundle.js',
   format: 'iife',
+  minify: true,
 });
 
 if (watch) {
