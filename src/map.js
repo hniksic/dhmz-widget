@@ -113,14 +113,16 @@ export const StationMap = {
         bounds: { minLon: 13.2, maxLon: 19.6, minLat: 42.2, maxLat: 46.7 },
         /** Snap distance for station selection (km) at zoom level 1 */
         snapDistance: 20,
-        /** Zoom limits */
-        minZoom: 1,
+        /** Zoom limits (minZoom is recalculated based on station positions) */
+        minZoom: 0.5,
         maxZoom: 100
     },
 
     // --- State ---
     /** Current zoom/pan state: scale and pan offset in base (unzoomed) coordinates */
     zoom: { scale: 1, x: 0, y: 0 },
+    /** Pan bounds calculated from station positions (in base coordinates) */
+    panBounds: null,
     /** Currently prehighlighted station name (desktop hover) */
     highlight: null,
     /** Currently tapped station name (mobile two-tap selection) */
@@ -136,6 +138,17 @@ export const StationMap = {
     isZoomed() { return this.zoom.scale > 1; },
     isDragging() { return this.drag?.moved === true; },
     isPinching() { return this.pinch !== null; },
+    /** Check if panning is possible (content extends beyond viewport) */
+    canPan() {
+        if (this.zoom.scale > 1) return true;
+        if (!this.panBounds) return false;
+        const { viewBox } = this.config;
+        const visibleWidth = viewBox.width / this.zoom.scale;
+        const visibleHeight = viewBox.height / this.zoom.scale;
+        const contentWidth = this.panBounds.maxX - this.panBounds.minX;
+        const contentHeight = this.panBounds.maxY - this.panBounds.minY;
+        return contentWidth > visibleWidth || contentHeight > visibleHeight;
+    },
 
     // --- Coordinate Conversion ---
     /**
@@ -199,17 +212,86 @@ export const StationMap = {
     },
 
     // --- Core Operations ---
-    /** Clamp pan to keep content visible within viewBox */
+    /** Clamp pan to keep stations reachable (center when zoomed out beyond content) */
     clampPan() {
-        const visibleWidth = this.config.viewBox.width / this.zoom.scale;
-        const visibleHeight = this.config.viewBox.height / this.zoom.scale;
-        this.zoom.x = Math.max(0, Math.min(this.zoom.x, this.config.viewBox.width - visibleWidth));
-        this.zoom.y = Math.max(0, Math.min(this.zoom.y, this.config.viewBox.height - visibleHeight));
+        const { viewBox } = this.config;
+        const bounds = this.panBounds || { minX: 0, minY: 0, maxX: viewBox.width, maxY: viewBox.height };
+
+        const visibleWidth = viewBox.width / this.zoom.scale;
+        const visibleHeight = viewBox.height / this.zoom.scale;
+        const contentWidth = bounds.maxX - bounds.minX;
+        const contentHeight = bounds.maxY - bounds.minY;
+
+        if (visibleWidth >= contentWidth) {
+            // Zoomed out - center horizontally on content
+            this.zoom.x = bounds.minX + (contentWidth - visibleWidth) / 2;
+        } else {
+            this.zoom.x = Math.max(bounds.minX, Math.min(this.zoom.x, bounds.maxX - visibleWidth));
+        }
+
+        if (visibleHeight >= contentHeight) {
+            // Zoomed out - center vertically on content
+            this.zoom.y = bounds.minY + (contentHeight - visibleHeight) / 2;
+        } else {
+            this.zoom.y = Math.max(bounds.minY, Math.min(this.zoom.y, bounds.maxY - visibleHeight));
+        }
     },
 
     /** Reset zoom to default (scale 1, no pan) */
     resetZoom() {
         this.zoom = { scale: 1, x: 0, y: 0 };
+    },
+
+    /**
+     * Calculate zoom and pan limits based on station positions.
+     * Updates config.minZoom and stores station bounds for pan clamping.
+     */
+    calculateBoundsFromStations() {
+        if (!cachedStations) return;
+
+        const { viewBox } = this.config;
+        let minLat = Infinity, maxLat = -Infinity;
+        let minLon = Infinity, maxLon = -Infinity;
+
+        // Find bounding box of all stations
+        for (const station of Object.values(cachedStations)) {
+            if (!isFinite(station.lat) || !isFinite(station.lon)) continue;
+            minLat = Math.min(minLat, station.lat);
+            maxLat = Math.max(maxLat, station.lat);
+            minLon = Math.min(minLon, station.lon);
+            maxLon = Math.max(maxLon, station.lon);
+        }
+
+        if (!isFinite(minLat)) return;
+
+        // Add some padding (5%)
+        const latPadding = (maxLat - minLat) * 0.05;
+        const lonPadding = (maxLon - minLon) * 0.05;
+        minLat -= latPadding;
+        maxLat += latPadding;
+        minLon -= lonPadding;
+        maxLon += lonPadding;
+
+        // Convert station bounds to base SVG coordinates
+        const topLeft = this.latLonToBase(maxLat, minLon);
+        const bottomRight = this.latLonToBase(minLat, maxLon);
+
+        // Store pan bounds (in base coordinates)
+        this.panBounds = {
+            minX: Math.min(0, topLeft.x),
+            minY: Math.min(0, topLeft.y),
+            maxX: Math.max(viewBox.width, bottomRight.x),
+            maxY: Math.max(viewBox.height, bottomRight.y)
+        };
+
+        // Calculate required zoom to fit all stations
+        const stationWidth = bottomRight.x - topLeft.x;
+        const stationHeight = bottomRight.y - topLeft.y;
+        const zoomX = viewBox.width / stationWidth;
+        const zoomY = viewBox.height / stationHeight;
+
+        // Use the smaller zoom to ensure everything fits
+        this.config.minZoom = Math.min(zoomX, zoomY, 1);
     },
 
     /**
@@ -284,6 +366,9 @@ export const StationMap = {
         const dotsGroup = document.getElementById('station-dots');
         const userGroup = document.getElementById('user-location');
         if (!dotsGroup || !cachedStations) return;
+
+        // Calculate zoom/pan bounds based on station positions
+        this.calculateBoundsFromStations();
 
         dotsGroup.innerHTML = '';
         userGroup.innerHTML = '';
@@ -539,7 +624,7 @@ export const StationMap = {
     mouse: {
         onDown(event) {
             const map = StationMap;
-            if (map.isZoomed()) {
+            if (map.canPan()) {
                 event.preventDefault();
                 map.drag = {
                     startX: event.clientX,
@@ -654,7 +739,7 @@ export const StationMap = {
                     initialY: map.zoom.y,
                     initialCenter: this.getCenter(event.touches)
                 };
-            } else if (event.touches.length === 1 && map.isZoomed()) {
+            } else if (event.touches.length === 1 && map.canPan()) {
                 event.preventDefault();
                 const touch = event.touches[0];
                 map.drag = {

@@ -252,6 +252,7 @@ export const LocationPicker = {
         switch (e.key) {
             case 'Escape':
                 this.close();
+                document.activeElement?.blur();
                 e.preventDefault();
                 break;
 
@@ -302,6 +303,15 @@ export const LocationPicker = {
     // --- Initialization ---
     init() {
         const self = this;
+
+        // Map trigger opens the map modal
+        document.getElementById('map-trigger').addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.currentTarget.blur();
+            if (self.getStationMap) {
+                self.getStationMap().openModal();
+            }
+        });
 
         // Toggle on trigger click
         document.getElementById('location-trigger').addEventListener('click', (e) => {
