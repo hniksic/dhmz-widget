@@ -12,6 +12,54 @@
 import { getWeatherCategory, getIntensity, isFreezingPrecipitation, hasHail } from './openmeteo.js';
 
 // =============================================================================
+// CONFIGURATION CONSTANTS
+// =============================================================================
+
+// Wind chill calculation parameters
+/** Temperature (°C) below which wind chill effect is applied */
+const WIND_CHILL_TEMP_THRESHOLD = 15;
+/** Wind speed (m/s) above which wind chill effect is applied */
+const WIND_CHILL_WIND_THRESHOLD = 2;
+/** Wind chill factor: perceived temperature drop per 1 m/s of wind */
+const WIND_CHILL_FACTOR = 0.8;
+/** Maximum wind chill adjustment in °C */
+const WIND_CHILL_MAX_ADJUSTMENT = 10;
+
+// Wind descriptor thresholds (m/s)
+/** Minimum wind speed to be worth mentioning at all */
+const WIND_MIN_THRESHOLD = 3;
+/** Wind speed for "moderate wind" descriptor */
+const WIND_MODERATE_THRESHOLD = 5;
+/** Wind speed for "strong wind" descriptor */
+const WIND_STRONG_THRESHOLD = 7;
+/** Wind speed for "storm wind" descriptor */
+const WIND_STORM_THRESHOLD = 10;
+
+// Humidity thresholds (%)
+/** Low humidity threshold (dry conditions) */
+const HUMIDITY_LOW_THRESHOLD = 30;
+/** Moderate high humidity threshold */
+const HUMIDITY_HIGH_THRESHOLD = 75;
+/** Very high humidity threshold (muggy/damp conditions) */
+const HUMIDITY_VERY_HIGH_THRESHOLD = 80;
+
+// Temperature thresholds for humidity descriptions (°C)
+/** Temperature above which high humidity feels "muggy" (sparina) */
+const TEMP_HOT_FOR_HUMIDITY = 25;
+/** Temperature below which high humidity feels "unpleasantly damp" */
+const TEMP_COLD_FOR_HUMIDITY = 10;
+
+// Default values for missing data
+/** Default humidity assumption when not provided */
+const DEFAULT_HUMIDITY = 50;
+
+// Guaranteed mention thresholds
+/** Wind speed (m/s) at or above which wind is always mentioned in descriptions */
+const WIND_ALWAYS_MENTION_THRESHOLD = 5;
+/** Humidity (%) at or above which humidity is always mentioned in descriptions */
+const HUMIDITY_ALWAYS_MENTION_THRESHOLD = 90;
+
+// =============================================================================
 // GENERATION COUNTER
 // =============================================================================
 
@@ -42,9 +90,8 @@ export function bumpDescriptionGeneration() {
 function effectiveTemp(temp, windSpeed) {
     const wind = windSpeed ?? 0;
     // Wind chill only applies when cold and windy
-    if (temp < 15 && wind > 2) {
-        // Each 1 m/s of wind ≈ -0.8°C, capped at -10°C adjustment
-        return temp - Math.min(wind * 0.8, 10);
+    if (temp < WIND_CHILL_TEMP_THRESHOLD && wind > WIND_CHILL_WIND_THRESHOLD) {
+        return temp - Math.min(wind * WIND_CHILL_FACTOR, WIND_CHILL_MAX_ADJUSTMENT);
     }
     return temp;
 }
@@ -922,7 +969,7 @@ function weightedPick(pool, context) {
     const filtered = pool.filter(item => {
         if (item.minTemp !== undefined && context.effTemp < item.minTemp) return false;
         if (item.maxTemp !== undefined && context.effTemp > item.maxTemp) return false;
-        if (item.minHumidity !== undefined && (context.humidity ?? 50) < item.minHumidity) return false;
+        if (item.minHumidity !== undefined && (context.humidity ?? DEFAULT_HUMIDITY) < item.minHumidity) return false;
         if (item.minWind !== undefined && (context.wind ?? 0) < item.minWind) return false;
         if (item.maxWind !== undefined && (context.wind ?? 0) > item.maxWind) return false;
         return true;
@@ -1055,14 +1102,14 @@ function getNoteworthiness(context, category, weatherCode) {
     // Wind noteworthiness
     const w = wind ?? 0;
     let windScore = 0;
-    if (w >= 10) windScore = 1.0;
-    else if (w >= 7) windScore = 0.8;
-    else if (w >= 5) windScore = 0.6;
-    else if (w >= 3) windScore = 0.3;
+    if (w >= WIND_STORM_THRESHOLD) windScore = 1.0;
+    else if (w >= WIND_STRONG_THRESHOLD) windScore = 0.8;
+    else if (w >= WIND_MODERATE_THRESHOLD) windScore = 0.6;
+    else if (w >= WIND_MIN_THRESHOLD) windScore = 0.3;
     else windScore = 0.1;
 
     // Humidity noteworthiness (mainly at extremes)
-    const h = humidity ?? 50;
+    const h = humidity ?? DEFAULT_HUMIDITY;
     let humidityScore = 0;
     if (h >= 85) humidityScore = 0.7;
     else if (h >= 75) humidityScore = 0.4;
@@ -1209,10 +1256,10 @@ function getTempDescriptor(effTemp) {
  * @returns {{adjective: string, adverb: string, noun: string}|null}
  */
 function getWindDescriptor(wind) {
-    if (!wind || wind < 3) return null;
-    if (wind >= 10) return { adjective: 'jak', adverb: 'jako vjetrovito', noun: 'olujni vjetar' };
-    if (wind >= 7) return { adjective: 'jak', adverb: 'vjetrovito', noun: 'jak vjetar' };
-    if (wind >= 5) return { adjective: 'umjeren', adverb: 'vjetrovito', noun: 'vjetar' };
+    if (!wind || wind < WIND_MIN_THRESHOLD) return null;
+    if (wind >= WIND_STORM_THRESHOLD) return { adjective: 'jak', adverb: 'jako vjetrovito', noun: 'olujni vjetar' };
+    if (wind >= WIND_STRONG_THRESHOLD) return { adjective: 'jak', adverb: 'vjetrovito', noun: 'jak vjetar' };
+    if (wind >= WIND_MODERATE_THRESHOLD) return { adjective: 'umjeren', adverb: 'vjetrovito', noun: 'vjetar' };
     return { adjective: 'lagan', adverb: 'lagano vjetrovito', noun: 'povjetarac' };
 }
 
@@ -1224,10 +1271,10 @@ function getWindDescriptor(wind) {
  */
 function getHumidityDescriptor(humidity, effTemp) {
     if (humidity === null) return null;
-    if (humidity >= 80 && effTemp >= 25) return { adjective: 'sparan', adverb: 'sparno' };
-    if (humidity >= 80 && effTemp <= 10) return { adjective: 'vlažan', adverb: 'neugodno vlažno' };
-    if (humidity >= 75) return { adjective: 'vlažan', adverb: 'vlažno' };
-    if (humidity <= 30) return { adjective: 'suh', adverb: 'suho' };
+    if (humidity >= HUMIDITY_VERY_HIGH_THRESHOLD && effTemp >= TEMP_HOT_FOR_HUMIDITY) return { adjective: 'sparan', adverb: 'sparno' };
+    if (humidity >= HUMIDITY_VERY_HIGH_THRESHOLD && effTemp <= TEMP_COLD_FOR_HUMIDITY) return { adjective: 'vlažan', adverb: 'neugodno vlažno' };
+    if (humidity >= HUMIDITY_HIGH_THRESHOLD) return { adjective: 'vlažan', adverb: 'vlažno' };
+    if (humidity <= HUMIDITY_LOW_THRESHOLD) return { adjective: 'suh', adverb: 'suho' };
     return null;
 }
 
@@ -1333,9 +1380,10 @@ function generateCompositionalDescription(category, weatherCode, context) {
     const humidity = getHumidityDescriptor(context.humidity, context.effTemp);
 
     // Decide which elements to include based on noteworthiness + randomness
+    // Above configured thresholds, wind and humidity are always mentioned
     const includeTemp = Math.random() < scores.temp + 0.2;  // Bias toward including temp
-    const includeWind = wind && Math.random() < scores.wind;
-    const includeHumidity = humidity && Math.random() < scores.humidity;
+    const includeWind = wind && (context.wind >= WIND_ALWAYS_MENTION_THRESHOLD || Math.random() < scores.wind);
+    const includeHumidity = humidity && (context.humidity >= HUMIDITY_ALWAYS_MENTION_THRESHOLD || Math.random() < scores.humidity);
 
     // Build list of available elements
     const available = new Set(['weather']);
@@ -1399,8 +1447,8 @@ function selectTemperatureTemplate(effTemp, windSpeed, humidity, timeOfDay, cont
         if (t.maxWind !== undefined && (windSpeed ?? 0) > t.maxWind) return false;
 
         // Check humidity constraints
-        if (t.minHumidity !== undefined && (humidity ?? 50) < t.minHumidity) return false;
-        if (t.maxHumidity !== undefined && (humidity ?? 50) > t.maxHumidity) return false;
+        if (t.minHumidity !== undefined && (humidity ?? DEFAULT_HUMIDITY) < t.minHumidity) return false;
+        if (t.maxHumidity !== undefined && (humidity ?? DEFAULT_HUMIDITY) > t.maxHumidity) return false;
 
         // Check time of day
         if (t.timeOfDay !== undefined && t.timeOfDay !== timeOfDay) return false;
