@@ -547,7 +547,7 @@ const TEMPLATES = [
     { pattern: '{cold_adj:nom:m} {weather_noun:nom}', tempRange: [-5, 5], weight: 0.7 },
     { pattern: 'Zimski dan', tempRange: [-5, 5], weight: 0.8 },
     { pattern: 'Zima je tu', tempRange: [-5, 3], weight: 0.6, colorful: true },
-    { pattern: 'Kaput vrijeme', tempRange: [-3, 6], weight: 0.6, colorful: true },
+    { pattern: 'Vrijeme za kaput', tempRange: [-3, 6], weight: 0.6, colorful: true },
     { pattern: '{cold_adj:nom:n} je vani', tempRange: [-5, 5], weight: 0.7 },
     { pattern: 'Vani je {cold_adj:nom:n}', tempRange: [-5, 5], weight: 0.7 },
 
@@ -567,7 +567,7 @@ const TEMPLATES = [
     { pattern: 'Svježe', tempRange: [8, 16], weight: 1.0 },
     { pattern: '{cool_adj:nom:n}', tempRange: [8, 16], weight: 0.9 },
     { pattern: 'Hlađe', tempRange: [8, 14], weight: 0.7 },
-    { pattern: 'Džemper vrijeme', tempRange: [8, 14], weight: 0.5, colorful: true },
+    { pattern: 'Vrijeme za džemper', tempRange: [8, 14], weight: 0.5, colorful: true },
     { pattern: 'Za dugi rukav', tempRange: [10, 16], weight: 0.5, colorful: true },
     { pattern: '{cool_adj:nom:f} svježina', tempRange: [8, 15], weight: 0.6 },
     { pattern: '{cool_adj:nom:n} je', tempRange: [8, 16], weight: 0.7 },
@@ -601,8 +601,8 @@ const TEMPLATES = [
     { pattern: 'Lijepo toplo', tempRange: [25, 30], weight: 0.8 },
     { pattern: 'Ugodno toplo', tempRange: [24, 29], weight: 0.7 },
     { pattern: '{warm_adj:nom:n} je', tempRange: [25, 32], weight: 0.7 },
-    { pattern: 'Terasa vrijeme', tempRange: [24, 30], weight: 0.5, colorful: true },
-    { pattern: 'Kratki rukavi vrijeme', tempRange: [24, 30], weight: 0.5, colorful: true },
+    { pattern: 'Vrijeme za terasu', tempRange: [24, 30], weight: 0.5, colorful: true },
+    { pattern: 'Vrijeme za kratke rukave', tempRange: [24, 30], weight: 0.5, colorful: true },
     { pattern: '{warm_adj:nom:f} {hot_noun:nom}', tempRange: [26, 31], weight: 0.6 },
 
     // ===================
@@ -775,7 +775,7 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Sitna kiša', weight: 1.0 },
         { pattern: 'Rosulja', weight: 0.8 },
         { pattern: 'Kiša rominja', weight: 0.7 },
-        { pattern: 'Sijeva kiša', weight: 0.6 },
+        { pattern: 'Sipi kiša', weight: 0.6 },
         // Freezing
         { pattern: 'Ledena kiša', weight: 1.0, freezing: true },
         { pattern: 'Kiša koja se smrzava', weight: 0.6, freezing: true },
