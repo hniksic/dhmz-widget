@@ -8,6 +8,7 @@ import {
     DATA_SOURCE, PROXY_URL, getSourceConfig, cachedStations, setCachedStations,
     fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL
 } from './config.js';
+import { log, warn } from './log.js';
 import { bumpDescriptionGeneration } from './nlg.js';
 import './parsers.js';  // Side-effect: registers parsers
 import { Geolocation } from './geo.js';
@@ -25,7 +26,6 @@ import { StationMap } from './map.js';
 async function fetchWeatherData() {
     // Prevent concurrent fetches (e.g., click + focus firing together)
     if (fetchInProgress) {
-        console.log('[vrijeme] Fetch already in progress, skipping');
         return;
     }
     setFetchInProgress(true);
@@ -36,25 +36,23 @@ async function fetchWeatherData() {
     const widget = document.getElementById('widget');
 
     widget.classList.add('refreshing');
-    console.log('[vrijeme] Fetching weather data from', DATA_SOURCE);
+    log(`Fetching from ${DATA_SOURCE}...`);
 
     try {
         const response = await fetch(fetchUrl);
-        console.log('[vrijeme] Response status:', response.status);
 
         if (!response.ok) {
             throw new Error(`HTTP error: ${response.status}`);
         }
 
         const responseText = await response.text();
-        console.log('[vrijeme] Response length:', responseText.length, 'chars');
 
         // Parse using source-specific parser
         setCachedStations(getSourceConfig().parser.parse(responseText));
 
         const collator = new Intl.Collator('hr');
         const stationNames = Object.keys(cachedStations).sort(collator.compare);
-        console.log('[vrijeme] Found stations:', stationNames.length);
+        log(`Loaded ${stationNames.length} stations from ${DATA_SOURCE}`);
 
         // Clear any previous error toast on successful fetch
         hideToast();
@@ -64,10 +62,9 @@ async function fetchWeatherData() {
         renderSelectedStation();
 
     } catch (error) {
-        console.error('[vrijeme] Error:', error);
+        warn('Fetch error:', error.message);
         // If we have cached data, show toast and keep displaying old data
         if (cachedStations) {
-            console.log('[vrijeme] Using cached data due to fetch error');
             showToast('Učitavanje nije uspjelo');
         } else {
             renderError('Greška: ' + error.message);
@@ -127,7 +124,7 @@ window.addEventListener('focus', refreshIfStale);
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
-        .catch(err => console.warn('[SW] Registration failed:', err));
+        .catch(err => warn('SW registration failed:', err.message));
 }
 
 // Tap on conditions to refresh (always fetches, no throttle)

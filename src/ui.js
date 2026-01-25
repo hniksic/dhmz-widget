@@ -396,7 +396,6 @@ export const SourceSwitcher = {
                 // Find station nearest to old station's coordinates
                 const nearest = findNearestStation(cachedStations, oldStation.lat, oldStation.lon);
                 if (nearest) {
-                    console.log('[vrijeme] Source switch: mapped', oldLocation, '→', nearest.name);
                     setSelectedLocation(nearest.name);
                 }
             }

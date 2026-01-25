@@ -6,10 +6,8 @@
  * - Semantic synonym pools with weighted selection
  * - Sentence templates with typed slots
  * - Simple wind chill for effective temperature
- * - WMO weather codes for precipitation/condition-based descriptions
+ * - Weather conditions for precipitation/condition-based descriptions
  */
-
-import { getWeatherCategory, getIntensity, isFreezingPrecipitation, hasHail } from './openmeteo.js';
 
 // =============================================================================
 // CONFIGURATION CONSTANTS
@@ -731,17 +729,16 @@ const TEMPLATES = [
 ];
 
 // =============================================================================
-// WEATHER CODE TEMPLATES (WMO-based)
+// WEATHER CODE TEMPLATES
 // =============================================================================
-// Templates organized by weather category from Open-Meteo weather codes.
+// Templates organized by weather category from weather-code.js.
 // These take priority when a weather code is available.
 
 /**
- * Weather templates organized by WMO weather code category.
+ * Weather templates organized by weather condition category.
  * Each template can optionally have:
- * - intensity: 'light' | 'moderate' | 'heavy' - matches getIntensity() result
- * - freezing: true - matches isFreezingPrecipitation()
- * - hail: true - matches hasHail()
+ * - intensity: 'light' | 'moderate' | 'heavy' - matches weather.intensity
+ * - freezing: true - matches weather.freezing
  * - tempRange: [min, max] - effective temperature constraint
  * - timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night'
  * - weight: selection probability (default 1.0)
@@ -775,14 +772,28 @@ const WEATHER_TEMPLATES = {
     ],
 
     // ===================
-    // CLOUDY (codes 2-3)
+    // PARTLY CLOUDY (code 2)
+    // ===================
+    partly_cloudy: [
+        // Basic - standard DHMZ terminology
+        { pattern: 'Djelomice sunčano', weight: 1.0 },
+        { pattern: 'Promjenljivo oblačno', weight: 1.0 },
+        { pattern: 'Umjereno oblačno', weight: 0.8 },
+        { pattern: 'Sunčano uz umjerenu naoblaku', weight: 0.7 },
+        // Temperature modifiers
+        { pattern: 'Djelomice sunčano i {warm_adj:nom:n}', weight: 0.5, tempRange: [20, 30] },
+        { pattern: 'Promjenljivo oblačno i {cold_adj:nom:n}', weight: 0.5, tempRange: [-10, 10] },
+        // Time-specific
+        { pattern: 'Djelomice sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
+    ],
+
+    // ===================
+    // CLOUDY (code 3)
     // ===================
     cloudy: [
         // Basic
         { pattern: 'Oblačno', weight: 1.0 },
         { pattern: 'Pretežno oblačno', weight: 0.9 },
-        { pattern: 'Djelomice sunčano', weight: 0.8 },
-        { pattern: 'Promjenljivo oblačno', weight: 0.7 },
         { pattern: '{cloudy_adj:nom:n}', weight: 0.7 },
         { pattern: '{cloudy_adj:nom:n} vrijeme', weight: 0.6 },
         { pattern: '{cloudy_adj:nom:m} dan', weight: 0.6, timeOfDay: 'afternoon' },
@@ -805,7 +816,7 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Magla', weight: 1.0 },
         { pattern: 'Gusta magla', weight: 0.7 },
         { pattern: 'Smanjena vidljivost', weight: 0.6 },
-        { pattern: 'Magleno', weight: 0.8 },
+        { pattern: 'Maglovito', weight: 0.8 },
         // Time-specific
         { pattern: 'Jutarnja magla', weight: 0.8, timeOfDay: 'morning' },
         { pattern: 'Noćna magla', weight: 0.6, timeOfDay: 'night' },
@@ -1030,15 +1041,23 @@ function fillTemplate(pattern, context) {
 // =============================================================================
 
 /**
+ * @typedef {Object} WeatherConditions
+ * @property {'clear'|'partly_cloudy'|'cloudy'|'fog'|'drizzle'|'rain'|'snow'|'thunderstorm'|null} category
+ * @property {'light'|'moderate'|'heavy'|null} intensity
+ * @property {boolean} freezing - True if freezing precipitation
+ * @property {boolean} hail - True if hail
+ */
+
+/**
  * Generates a weather description using the NLG template system.
  * @param {number} temp - Air temperature (°C)
  * @param {number|null} humidity - Relative humidity (%)
  * @param {number|null} windSpeed - Wind speed (m/s)
  * @param {number|null} dewpoint - Dewpoint temperature (°C) - unused but kept for API compatibility
- * @param {number|null} weatherCode - WMO weather code from Open-Meteo (optional)
+ * @param {WeatherConditions|null} weather - Weather conditions from current-weather.js (optional)
  * @returns {string} Weather description in Croatian
  */
-export function generateWeatherDescription(temp, humidity, windSpeed, dewpoint, weatherCode = null) {
+export function generateWeatherDescription(temp, humidity, windSpeed, dewpoint, weather = null) {
     // Calculate effective temperature (with wind chill)
     const effTemp = effectiveTemp(temp, windSpeed);
 
@@ -1053,14 +1072,11 @@ export function generateWeatherDescription(temp, humidity, windSpeed, dewpoint, 
     // Get time of day for time-specific templates
     const timeOfDay = getTimeOfDay();
 
-    // If weather code is available, try weather-code-based templates first
-    if (weatherCode !== null) {
-        const category = getWeatherCategory(weatherCode);
-        if (category && WEATHER_TEMPLATES[category]) {
-            const result = selectWeatherCodeTemplate(category, weatherCode, effTemp, timeOfDay, context);
-            if (result) {
-                return result;
-            }
+    // If weather conditions are available, try weather-based templates first
+    if (weather !== null && weather.category && WEATHER_TEMPLATES[weather.category]) {
+        const result = selectWeatherCodeTemplate(weather, effTemp, timeOfDay, context);
+        if (result) {
+            return result;
         }
     }
 
@@ -1078,11 +1094,10 @@ export function generateWeatherDescription(temp, humidity, windSpeed, dewpoint, 
  * Determines the "noteworthiness" of each weather dimension.
  * Returns a score 0-1 for how much each aspect deserves mention.
  * @param {Object} context - Weather context
- * @param {string} category - Weather category from code
- * @param {number} weatherCode - WMO weather code
+ * @param {string} category - Weather category
  * @returns {{temp: number, wind: number, humidity: number, weather: number}}
  */
-function getNoteworthiness(context, category, weatherCode) {
+function getNoteworthiness(context, category) {
     const { effTemp, wind, humidity } = context;
 
     // Temperature noteworthiness - extreme temps are more noteworthy
@@ -1119,22 +1134,20 @@ function getNoteworthiness(context, category, weatherCode) {
     // Weather condition noteworthiness
     let weatherScore = 1.0;  // Weather code conditions are always noteworthy
     if (category === 'clear') weatherScore = 0.7;  // Clear is "default", slightly less
+    if (category === 'partly_cloudy') weatherScore = 0.65;
     if (category === 'cloudy') weatherScore = 0.6;
 
     return { temp: tempScore, wind: windScore, humidity: humidityScore, weather: weatherScore };
 }
 
 /**
- * Gets the base weather phrase for a category/code.
- * @param {string} category
- * @param {number} weatherCode
+ * Gets the base weather phrase for a weather condition.
+ * @param {WeatherConditions} weather - Weather conditions object
  * @param {Object} context
  * @returns {{phrase: string, adjectival: string|null}}
  */
-function getWeatherPhrase(category, weatherCode, context) {
-    const intensity = getIntensity(weatherCode);
-    const freezing = isFreezingPrecipitation(weatherCode);
-    const hail = hasHail(weatherCode);
+function getWeatherPhrase(weather, context) {
+    const { category, intensity, freezing, hail } = weather;
 
     // Each category returns a noun phrase and optional adjectival form
     switch (category) {
@@ -1144,18 +1157,22 @@ function getWeatherPhrase(category, weatherCode, context) {
                 { phrase: 'sunčano', adjectival: 'sunčano' },
                 { phrase: 'vedro nebo', adjectival: 'vedro' },
             ]);
+        case 'partly_cloudy':
+            return pickOne([
+                { phrase: 'djelomice sunčano', adjectival: null },
+                { phrase: 'promjenljivo oblačno', adjectival: 'oblačno' },
+                { phrase: 'umjereno oblačno', adjectival: 'oblačno' },
+            ]);
         case 'cloudy':
             return pickOne([
                 { phrase: 'oblačno', adjectival: 'oblačno' },
                 { phrase: 'pretežno oblačno', adjectival: 'oblačno' },
-                { phrase: 'djelomice sunčano', adjectival: null },
-                { phrase: 'promjenljivo oblačno', adjectival: 'oblačno' },
             ]);
         case 'fog':
             return pickOne([
-                { phrase: 'magla', adjectival: 'magleno' },
-                { phrase: 'gusta magla', adjectival: 'magleno' },
-                { phrase: 'magleno', adjectival: 'magleno' },
+                { phrase: 'magla', adjectival: 'maglovito' },
+                { phrase: 'gusta magla', adjectival: 'maglovito' },
+                { phrase: 'maglovito', adjectival: 'maglovito' },
             ]);
         case 'drizzle':
             if (freezing) {
@@ -1364,17 +1381,16 @@ const COMPOSITION_PATTERNS = [
 /**
  * Generates a compositional weather description combining all relevant elements.
  * Uses fuzzy logic to decide which elements to include.
- * @param {string} category - Weather category
- * @param {number} weatherCode - WMO weather code
+ * @param {WeatherConditions} weatherConditions - Weather conditions object
  * @param {Object} context - Weather context (effTemp, wind, humidity)
  * @returns {string} Generated description
  */
-function generateCompositionalDescription(category, weatherCode, context) {
-    const scores = getNoteworthiness(context, category, weatherCode);
+function generateCompositionalDescription(weatherConditions, context) {
+    const scores = getNoteworthiness(context, weatherConditions.category);
 
     // Get descriptors for each element
-    const weather = getWeatherPhrase(category, weatherCode, context);
-    weather.category = category;
+    const weather = getWeatherPhrase(weatherConditions, context);
+    weather.category = weatherConditions.category;
     const temp = getTempDescriptor(context.effTemp);
     const wind = getWindDescriptor(context.wind);
     const humidity = getHumidityDescriptor(context.humidity, context.effTemp);
@@ -1413,18 +1429,17 @@ function generateCompositionalDescription(category, weatherCode, context) {
 }
 
 /**
- * Selects and generates a description based on weather code.
+ * Selects and generates a description based on weather conditions.
  * Uses compositional generation for natural, varied descriptions.
- * @param {string} category - Weather category (clear, cloudy, fog, etc.)
- * @param {number} weatherCode - WMO weather code
+ * @param {WeatherConditions} weather - Weather conditions object
  * @param {number} effTemp - Effective temperature
  * @param {string} timeOfDay - Current time of day
  * @param {Object} context - Template filling context
  * @returns {string|null} Generated description or null if no match
  */
-function selectWeatherCodeTemplate(category, weatherCode, effTemp, timeOfDay, context) {
+function selectWeatherCodeTemplate(weather, effTemp, timeOfDay, context) {
     // Use compositional generation
-    return generateCompositionalDescription(category, weatherCode, context);
+    return generateCompositionalDescription(weather, context);
 }
 
 /**

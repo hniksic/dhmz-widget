@@ -5,6 +5,7 @@
  */
 
 import { DATA_SOURCES } from './config.js';
+import { warn } from './log.js';
 import { generateWeatherDescription } from './nlg.js';
 
 // =============================================================================
@@ -89,7 +90,7 @@ export const DhmzParser = {
     parse(xmlText) {
         // Verify we got XML, not an error page
         if (!xmlText.startsWith('<?xml')) {
-            console.error('[vrijeme] Invalid response (not XML):', xmlText.substring(0, 200));
+            warn('Invalid response (not XML)');
             throw new Error('Invalid response from proxy');
         }
 
@@ -98,7 +99,7 @@ export const DhmzParser = {
         // Check for XML parse errors
         const parseError = xmlDoc.querySelector('parsererror');
         if (parseError) {
-            console.error('[vrijeme] XML parse error:', parseError.textContent);
+            warn('XML parse error');
             throw new Error('XML parse error');
         }
 
@@ -250,7 +251,7 @@ export const PljusakParser = {
         // Extract the podaci array from the JavaScript
         const podaciMatch = htmlText.match(/var\s+podaci\s*=\s*(\[[\s\S]*?\]);/);
         if (!podaciMatch) {
-            console.error('[vrijeme] Could not find podaci array in response');
+            warn('Could not find podaci array in response');
             throw new Error('Invalid response format');
         }
 
@@ -258,11 +259,10 @@ export const PljusakParser = {
         try {
             podaci = JSON.parse(podaciMatch[1]);
         } catch (e) {
-            console.error('[vrijeme] Failed to parse podaci array:', e);
+            warn('Failed to parse podaci array');
             throw new Error('Failed to parse weather data');
         }
 
-        console.log('[vrijeme] Parsed', podaci.length, 'station entries');
         return this.extractStations(podaci);
     },
 
@@ -301,7 +301,6 @@ export const PljusakParser = {
         /** @type {Object<string, StationData>} */
         const result = {};
         const now = Date.now();
-        let staleCount = 0;
 
         for (const entry of podaci) {
             const name = entry[I.NAME];
@@ -322,7 +321,6 @@ export const PljusakParser = {
 
             // Filter out stations with stale readings (older than 12 hours)
             if (!measurementTime || (now - measurementTime) > this.MAX_AGE_MS) {
-                staleCount++;
                 continue;
             }
 
@@ -343,10 +341,6 @@ export const PljusakParser = {
                 condition: this.generateDescription(temperature, humidity, windSpeed, dewpoint),
                 measurementTime
             };
-        }
-
-        if (staleCount > 0) {
-            console.log('[vrijeme] Filtered out', staleCount, 'stations with readings older than 12h');
         }
 
         return result;

@@ -9,6 +9,7 @@ import {
     NEAREST_LOCATION, getSourceConfig, PROXY_URL, cachedStations, lastRefresh,
     hasSelectedLocation, getSelectedLocation, setSelectedLocation
 } from './config.js';
+import { log, warn } from './log.js';
 
 // =============================================================================
 // DISTANCE CALCULATIONS
@@ -52,7 +53,6 @@ export function findNearestStation(stations, lat, lon) {
         }
     }
 
-    console.log('[vrijeme] Nearest station:', nearest, `(${minDist.toFixed(1)} km)`);
     return nearest ? { name: nearest, distance: minDist } : null;
 }
 
@@ -119,7 +119,6 @@ export const Geolocation = {
      */
     request() {
         if (!('geolocation' in navigator)) {
-            console.log('[vrijeme] Geolocation not available');
             this.status = 'unavailable';
             if (this.onUpdate) this.onUpdate();
             return;
@@ -133,7 +132,7 @@ export const Geolocation = {
                     lat: position.coords.latitude,
                     lon: position.coords.longitude
                 };
-                console.log('[vrijeme] User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
+                log('User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
 
                 // On first visit, auto-select "Najbliža"
                 if (!hasSelectedLocation()) {
@@ -147,7 +146,6 @@ export const Geolocation = {
                 }
             },
             (error) => {
-                console.log('[vrijeme] Geolocation denied or failed:', error.message, 'code:', error.code);
                 // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
                 self.status = error.code === 1 ? 'denied' : 'unavailable';
                 if (self.onUpdate) self.onUpdate();
@@ -298,18 +296,13 @@ export async function getYrnoForecastUrl(lat, lon, stationName = null) {
     // Helper: search Nominatim then try yr.no queries until first match
     async function searchViaNominatim() {
         const queries = await reverseGeocode(lat, lon);
-        if (!queries) {
-            console.log('[yr.no] Nominatim returned no address for', cacheKey);
-            return null;
-        }
+        if (!queries) return null;
         for (const query of queries) {
             const result = await searchYrnoLocation(query, lat, lon);
             if (result) {
-                console.log('[yr.no] Nominatim query', query, '→ dist=' + result.dist.toFixed(4));
                 return { ...result, query };
             }
         }
-        console.log('[yr.no] No yr.no match for Nominatim queries');
         return null;
     }
 
@@ -319,7 +312,6 @@ export async function getYrnoForecastUrl(lat, lon, stationName = null) {
         if (!stationName) return null;
         const result = await searchYrnoLocation(stationName, lat, lon);
         if (result) {
-            console.log('[yr.no] Station name', stationName, '→ dist=' + result.dist.toFixed(4));
             return { ...result, query: stationName };
         }
         // Try the part before comma (handles "Golubić, brana", "Grmeč, Crni vrh", etc.)
@@ -328,11 +320,9 @@ export async function getYrnoForecastUrl(lat, lon, stationName = null) {
             const shortName = stationName.substring(0, commaIdx).trim();
             const shortResult = await searchYrnoLocation(shortName, lat, lon);
             if (shortResult) {
-                console.log('[yr.no] Station short name', shortName, '→ dist=' + shortResult.dist.toFixed(4));
                 return { ...shortResult, query: shortName };
             }
         }
-        console.log('[yr.no] No yr.no match for station name', stationName);
         return null;
     }
 
@@ -348,12 +338,10 @@ export async function getYrnoForecastUrl(lat, lon, stationName = null) {
 
     if (best && best.dist < YRNO_MAX_DISTANCE) {
         const url = `https://www.yr.no/en/forecast/daily-table/${best.id}`;
-        console.log('[yr.no] Resolved', best.query, '→', url);
         yrnoUrlCache.set(cacheKey, url);
         return url;
     }
 
-    console.log('[yr.no] Using fallback URL for', cacheKey);
     yrnoUrlCache.set(cacheKey, fallbackUrl);
     return fallbackUrl;
 }

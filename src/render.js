@@ -9,9 +9,10 @@ import {
     DISTANCE_WARNING_THRESHOLD, NEAREST_LOCATION, DATA_SOURCE,
     getSelectedLocation, setSelectedLocation
 } from './config.js';
+import { log, warn } from './log.js';
 import { Geolocation, getStationForLocation, getYrnoForecastUrl } from './geo.js';
 import { hide, show, setText, LocationPicker } from './ui.js';
-import { fetchWeatherCode } from './openmeteo.js';
+import { fetchCurrentWeather } from './current-weather.js';
 import { generateWeatherDescription } from './nlg.js';
 
 /** Counter to track render operations for race condition prevention */
@@ -79,7 +80,7 @@ function formatMeasurementTime(measurementTime) {
 
 /**
  * Renders weather data to the widget.
- * Fetches weather code from Open-Meteo for enhanced condition descriptions.
+ * Fetches weather conditions for enhanced condition descriptions.
  * @param {StationData} station
  * @param {number|null} distance - Distance to station in km (only for "nearest" mode)
  */
@@ -126,7 +127,7 @@ async function render(station, distance) {
         distanceWarning.hidden = true;
     }
 
-    // Display initial condition (may be updated later with weather code)
+    // Display initial condition (may be updated later with weather conditions)
     let condition = station.condition;
     if (condition) {
         setText('condition', condition.charAt(0).toUpperCase() + condition.slice(1));
@@ -135,20 +136,20 @@ async function render(station, distance) {
     }
     show('condition-container');
 
-    // For pljusak.com stations, fetch weather code for enhanced NLG descriptions.
-    // Open-Meteo is fetched in the background and only used for the condition text.
+    // For pljusak.com stations, fetch weather conditions for enhanced NLG descriptions.
+    // The weather API is fetched in the background and only used for the condition text.
     // The numbers (temperature, humidity, etc.) are solely from pljusak.com/DHMZ.
     // This is done after initial render to avoid delaying the UI.
     if (DATA_SOURCE === 'pljusak' && isFinite(station.lat) && isFinite(station.lon)) {
-        const weatherCode = await fetchWeatherCode(station.lat, station.lon);
+        const weather = await fetchCurrentWeather(station.lat, station.lon);
         // Guard against race condition: only update if this is still the active render
-        if (weatherCode !== null && thisRender === renderGeneration) {
+        if (weather !== null && thisRender === renderGeneration) {
             condition = generateWeatherDescription(
                 station.temperature,
                 station.humidity,
                 station.windSpeed,
                 null,
-                weatherCode
+                weather
             );
             setText('condition', condition.charAt(0).toUpperCase() + condition.slice(1));
         }
@@ -222,7 +223,7 @@ function renderStatus(message, showCancel = true) {
 
 /**
  * Renders the currently selected station from cached data.
- * Async to support weather code fetching for pljusak.com stations.
+ * Async to support weather conditions fetching for pljusak.com stations.
  */
 export async function renderSelectedStation() {
     if (!cachedStations) return;
@@ -260,13 +261,11 @@ export async function renderSelectedStation() {
         // If still no station (no coords), just return and wait
         result = getStationForLocation(cachedStations, selectedLocation);
         if (result) {
-            console.warn(`[vrijeme] Station "${notFoundStation}" not found, falling back to nearest (${result.station.name})`);
-        } else {
-            console.warn(`[vrijeme] Station "${notFoundStation}" not found, cannot determine nearest (no location)`);
+            warn(`Station "${notFoundStation}" not found, using nearest`);
         }
         if (!result) return;
     }
 
-    console.log('[vrijeme] Displaying:', result.station.name, result.station.temperature + '°C');
+    log('Displaying:', result.station.name, result.station.temperature + '°C');
     await render(result.station, result.distance);
 }
