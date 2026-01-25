@@ -5,29 +5,10 @@
  * and yr.no forecast URL resolution.
  */
 
-// =============================================================================
-// LOCATION STORAGE
-// =============================================================================
-
-/** Get LocalStorage key for selected location (source-specific) */
-function getLocationKey() {
-    return getSourceConfig().locationKey;
-}
-
-/** Check if user has explicitly chosen a location */
-function hasSelectedLocation() {
-    return localStorage.getItem(getLocationKey()) !== null;
-}
-
-/** Get selected location from localStorage */
-function getSelectedLocation() {
-    return localStorage.getItem(getLocationKey()) || NEAREST_LOCATION;
-}
-
-/** Save selected location to localStorage */
-function setSelectedLocation(location) {
-    localStorage.setItem(getLocationKey(), location);
-}
+import {
+    NEAREST_LOCATION, getSourceConfig, PROXY_URL, cachedStations, lastRefresh,
+    hasSelectedLocation, getSelectedLocation, setSelectedLocation
+} from './config.js';
 
 // =============================================================================
 // DISTANCE CALCULATIONS
@@ -41,7 +22,7 @@ function setSelectedLocation(location) {
  * @param {number} lon2
  * @returns {number} Distance in kilometers
  */
-function haversineDistance(lat1, lon1, lat2, lon2) {
+export function haversineDistance(lat1, lon1, lat2, lon2) {
     const R = 6371; // Earth's radius in km
     const toRad = deg => deg * Math.PI / 180;
     const dLat = toRad(lat2 - lat1);
@@ -58,7 +39,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
  * @param {number} lon
  * @returns {{name: string, distance: number}|null} Station name and distance in km, or null if none found
  */
-function findNearestStation(stations, lat, lon) {
+export function findNearestStation(stations, lat, lon) {
     let nearest = null;
     let minDist = Infinity;
 
@@ -81,7 +62,7 @@ function findNearestStation(stations, lat, lon) {
  * @param {string} location
  * @returns {{station: StationData, distance: number|null}|null}
  */
-function getStationForLocation(allStations, location) {
+export function getStationForLocation(allStations, location) {
     if (location === NEAREST_LOCATION) {
         // Use geolocation to find nearest station
         if (Geolocation.hasCoords()) {
@@ -115,7 +96,7 @@ function getStationForLocation(allStations, location) {
  *    - Permission denied (code 1) → set status='denied', show error
  *    - Other failure (timeout, etc.) → set status='unavailable', show error
  */
-const Geolocation = {
+export const Geolocation = {
     /** Status: 'unknown' | 'granted' | 'denied' | 'unavailable' */
     status: 'unknown',
     /** Cached coordinates from last successful geolocation */
@@ -305,7 +286,7 @@ async function reverseGeocode(lat, lon) {
  * @param {string | null} [stationName] - Station name for parallel search
  * @returns {Promise<string>}
  */
-async function getYrnoForecastUrl(lat, lon, stationName = null) {
+export async function getYrnoForecastUrl(lat, lon, stationName = null) {
     const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
     if (yrnoUrlCache.has(cacheKey)) {
         return yrnoUrlCache.get(cacheKey);

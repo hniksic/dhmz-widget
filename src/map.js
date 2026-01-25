@@ -4,6 +4,12 @@
  * Interactive map for selecting weather stations.
  */
 
+import {
+    cachedStations, getSelectedLocation, setSelectedLocation, NEAREST_LOCATION
+} from './config.js';
+import { Geolocation, findNearestStation, haversineDistance } from './geo.js';
+import { LocationPicker, SourceSwitcher } from './ui.js';
+
 // =============================================================================
 // STATION MAP
 // =============================================================================
@@ -18,7 +24,7 @@
  * - Mobile:  tap highlights station + shows label, second tap selects,
  *            pinch to zoom, drag to pan when zoomed in
  */
-const StationMap = {
+export const StationMap = {
     // --- Configuration ---
     config: {
         /** Latitude correction factor - tuned to match Google Maps appearance */

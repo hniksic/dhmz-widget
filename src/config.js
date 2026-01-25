@@ -9,7 +9,7 @@
 // =============================================================================
 
 /** LocalStorage key for source preference */
-const SOURCE_KEY = 'weather-source';
+export const SOURCE_KEY = 'weather-source';
 
 /**
  * Get saved source from localStorage, with URL override for backwards compatibility.
@@ -30,18 +30,18 @@ function getSavedSource() {
  * Save source preference to localStorage.
  * @param {'dhmz' | 'pljusak'} source
  */
-function saveSource(source) {
+export function saveSource(source) {
     localStorage.setItem(SOURCE_KEY, source);
 }
 
 /** Current data source (mutable - can be changed via UI) */
-let DATA_SOURCE = getSavedSource();
+export let DATA_SOURCE = getSavedSource();
 
 /**
  * Update the current data source.
  * @param {'dhmz' | 'pljusak'} source
  */
-function setDataSource(source) {
+export function setDataSource(source) {
     DATA_SOURCE = source;
 }
 
@@ -50,7 +50,7 @@ function setDataSource(source) {
  * Each source has a parser object (DhmzParser or PljusakParser) that handles
  * parsing the response and formatting measurement times.
  */
-const DATA_SOURCES = {
+export const DATA_SOURCES = {
     dhmz: {
         url: 'https://vrijeme.hr/hrvatska1_n.xml',
         locationKey: 'dhmz-location',
@@ -82,70 +82,94 @@ const DATA_SOURCES = {
 };
 
 /** Get current source configuration (dynamic lookup) */
-function getSourceConfig() {
+export function getSourceConfig() {
     return DATA_SOURCES[DATA_SOURCE];
 }
 
 /** CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers) */
-const PROXY_URL = 'https://corsproxy.io/?';
+export const PROXY_URL = 'https://corsproxy.io/?';
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
 /** Special location that uses geolocation to find nearest station */
-const NEAREST_LOCATION = 'Najbliža';
+export const NEAREST_LOCATION = 'Najbliža';
 
 /** Refresh interval in milliseconds (15 minutes) */
-const REFRESH_INTERVAL = 15 * 60 * 1000;
+export const REFRESH_INTERVAL = 15 * 60 * 1000;
 
 /** Data older than this is considered stale (1 hour) */
-const STALE_THRESHOLD_MS = 60 * 60 * 1000;
+export const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
 /** Data older than this shows "staro" instead of the hour (23 hours) */
-const OLD_THRESHOLD_MS = 23 * 60 * 60 * 1000;
+export const OLD_THRESHOLD_MS = 23 * 60 * 60 * 1000;
 
 /** Type-ahead search buffer timeout (ms) */
-const TYPEAHEAD_TIMEOUT_MS = 2000;
+export const TYPEAHEAD_TIMEOUT_MS = 2000;
 
 /** Distance (km) at which to warn user about station distance */
-const DISTANCE_WARNING_THRESHOLD = 20;
+export const DISTANCE_WARNING_THRESHOLD = 20;
 
 // =============================================================================
 // SHARED STATE
 // =============================================================================
 
 /** Cached station data from last fetch */
-let cachedStations = null;
+export let cachedStations = null;
 
 /**
  * Update cached stations.
  * @param {Object<string, StationData>|null} stations
  */
-function setCachedStations(stations) {
+export function setCachedStations(stations) {
     cachedStations = stations;
 }
 
 /** Whether a fetch is currently in progress (prevents concurrent fetches) */
-let fetchInProgress = false;
+export let fetchInProgress = false;
 
 /**
  * Set fetch in progress state.
  * @param {boolean} inProgress
  */
-function setFetchInProgress(inProgress) {
+export function setFetchInProgress(inProgress) {
     fetchInProgress = inProgress;
 }
 
 /** Timestamp of last fetch start (for throttling auto-refresh) */
-let lastRefresh = 0;
+export let lastRefresh = 0;
 
 /**
  * Set last refresh timestamp.
  * @param {number} timestamp
  */
-function setLastRefresh(timestamp) {
+export function setLastRefresh(timestamp) {
     lastRefresh = timestamp;
+}
+
+// =============================================================================
+// LOCATION STORAGE
+// =============================================================================
+
+/** Get LocalStorage key for selected location (source-specific) */
+export function getLocationKey() {
+    return getSourceConfig().locationKey;
+}
+
+/** Check if user has explicitly chosen a location */
+export function hasSelectedLocation() {
+    return localStorage.getItem(getLocationKey()) !== null;
+}
+
+/** Get selected location from localStorage */
+export function getSelectedLocation() {
+    return localStorage.getItem(getLocationKey()) || NEAREST_LOCATION;
+}
+
+/** Save selected location to localStorage */
+export function setSelectedLocation(location) {
+    localStorage.setItem(getLocationKey(), location);
 }
 
 // =============================================================================

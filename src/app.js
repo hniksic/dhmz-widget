@@ -4,6 +4,17 @@
  * Wires together all modules and handles initialization.
  */
 
+import {
+    DATA_SOURCE, PROXY_URL, getSourceConfig, cachedStations, setCachedStations,
+    fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL
+} from './config.js';
+import { bumpDescriptionGeneration } from './nlg.js';
+import './parsers.js';  // Side-effect: registers parsers
+import { Geolocation } from './geo.js';
+import { LocationPicker, SourceSwitcher, hideToast, showToast } from './ui.js';
+import { renderSelectedStation, renderError } from './render.js';
+import { StationMap } from './map.js';
+
 // =============================================================================
 // DATA FETCHING
 // =============================================================================

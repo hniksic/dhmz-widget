@@ -4,6 +4,14 @@
  * Functions for rendering weather data, errors, and status messages.
  */
 
+import {
+    getSourceConfig, cachedStations, STALE_THRESHOLD_MS, OLD_THRESHOLD_MS,
+    DISTANCE_WARNING_THRESHOLD, NEAREST_LOCATION,
+    getSelectedLocation, setSelectedLocation
+} from './config.js';
+import { Geolocation, getStationForLocation, getYrnoForecastUrl } from './geo.js';
+import { hide, show, setText, LocationPicker } from './ui.js';
+
 // =============================================================================
 // STATION NAME PARSING
 // =============================================================================
@@ -162,7 +170,7 @@ function render(station, distance) {
  * Renders an error message to the widget.
  * @param {string} message
  */
-function renderError(message) {
+export function renderError(message) {
     hide('weather');
     hide('status');
     setText('error-message', message);
@@ -185,7 +193,7 @@ function renderStatus(message, showCancel = true) {
 /**
  * Renders the currently selected station from cached data.
  */
-function renderSelectedStation() {
+export function renderSelectedStation() {
     if (!cachedStations) return;
 
     const stationNames = Object.keys(cachedStations);

@@ -4,22 +4,29 @@
  * Location picker dropdown, source switcher, and toast notifications.
  */
 
+import {
+    getSourceConfig, DATA_SOURCE, setDataSource, saveSource, NEAREST_LOCATION,
+    TYPEAHEAD_TIMEOUT_MS, cachedStations, setCachedStations,
+    getSelectedLocation, setSelectedLocation
+} from './config.js';
+import { Geolocation, findNearestStation } from './geo.js';
+
 // =============================================================================
 // DOM HELPERS
 // =============================================================================
 
 /** Show an element by id */
-function show(id) {
+export function show(id) {
     document.getElementById(id).hidden = false;
 }
 
 /** Hide an element by id */
-function hide(id) {
+export function hide(id) {
     document.getElementById(id).hidden = true;
 }
 
 /** Set text content of an element by id */
-function setText(id, text) {
+export function setText(id, text) {
     document.getElementById(id).textContent = text;
 }
 
@@ -35,7 +42,7 @@ let toastTimeout = null;
  * Auto-hides after 5 seconds, or can be manually dismissed.
  * @param {string} message
  */
-function showToast(message) {
+export function showToast(message) {
     // Clear any existing timeout
     if (toastTimeout) {
         clearTimeout(toastTimeout);
@@ -46,7 +53,7 @@ function showToast(message) {
 }
 
 /** Hides the toast notification */
-function hideToast() {
+export function hideToast() {
     hide('toast');
     if (toastTimeout) {
         clearTimeout(toastTimeout);
@@ -68,7 +75,7 @@ const SHOW_MAP_OPTION = '__show_map__';
 /**
  * LocationPicker - Handles the station selection dropdown.
  */
-const LocationPicker = {
+export const LocationPicker = {
     // --- State ---
     /** Type-ahead search buffer */
     searchBuffer: '',
@@ -333,7 +340,7 @@ const LocationPicker = {
  * - If "Najbliža" was selected: uses user's GPS to find nearest
  * - Otherwise: uses old station's coordinates to find nearest in new source
  */
-const SourceSwitcher = {
+export const SourceSwitcher = {
     // --- Callbacks (set by app.js) ---
     onToggle: null,
     onRender: null,

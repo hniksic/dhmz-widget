@@ -15,13 +15,13 @@
 /**
  * Generation counter - incremented on user-triggered refreshes to vary descriptions.
  */
-let descriptionGeneration = 0;
+export let descriptionGeneration = 0;
 
 /**
  * Increments the generation counter to produce a different description on next render.
  * Called when user explicitly requests a refresh (e.g., clicking on condition).
  */
-function bumpDescriptionGeneration() {
+export function bumpDescriptionGeneration() {
     descriptionGeneration++;
 }
 
@@ -719,7 +719,7 @@ function fillTemplate(pattern, context) {
  * @param {number|null} dewpoint - Dewpoint temperature (°C) - unused but kept for API compatibility
  * @returns {string} Weather description in Croatian
  */
-function generateWeatherDescription(temp, humidity, windSpeed, dewpoint) {
+export function generateWeatherDescription(temp, humidity, windSpeed, dewpoint) {
     // Calculate effective temperature (with wind chill)
     const effTemp = effectiveTemp(temp, windSpeed);
 

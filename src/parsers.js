@@ -4,6 +4,8 @@
  * Parsers for DHMZ (vrijeme.hr) and pljusak.com data formats.
  */
 
+import { DATA_SOURCES } from './config.js';
+import { generateWeatherDescription } from './nlg.js';
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -78,7 +80,7 @@ function parseNumberOrNull(value) {
 /**
  * DhmzParser - Parses weather data from DHMZ (vrijeme.hr) XML format.
  */
-const DhmzParser = {
+export const DhmzParser = {
     /**
      * Parses DHMZ XML response and returns station data.
      * @param {string} xmlText - Raw XML response
@@ -218,7 +220,7 @@ const DhmzParser = {
 /**
  * PljusakParser - Parses weather data from pljusak.com JavaScript array format.
  */
-const PljusakParser = {
+export const PljusakParser = {
     /** Data array indices */
     INDICES: {
         TYPE: 0,

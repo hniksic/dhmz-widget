@@ -18,20 +18,13 @@
  * - Bump version whenever deploying changes to cached files
  */
 
-const CACHE_NAME = 'zagreb-temp-v62';
+const CACHE_NAME = 'zagreb-temp-v63';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
-  './config.js',
-  './nlg.js',
-  './parsers.js',
-  './geo.js',
-  './ui.js',
-  './render.js',
-  './map.js',
-  './app.js',
+  './bundle.js',
   './icon.svg',
   './icon-192.png',
   './icon-512.png'
