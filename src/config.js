@@ -87,7 +87,7 @@ export function getSourceConfig() {
 }
 
 /** CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers) */
-export const PROXY_URL = 'https://corsproxy.io/?';
+export const PROXY_URL = 'https://api.codetabs.com/v1/proxy?quest=';
 
 // =============================================================================
 // CONSTANTS

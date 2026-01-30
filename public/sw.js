@@ -42,7 +42,7 @@ self.addEventListener('fetch', event => {
   const url = event.request.url;
 
   // Weather API and proxies: always fetch from network, never cache
-  if (url.includes('corsproxy') || url.includes('allorigins') ||
+  if (url.includes('codetabs') || url.includes('corsproxy') || url.includes('allorigins') ||
       url.includes('vrijeme.hr') || url.includes('pljusak.com') ||
       url.includes('open-meteo.com')) {
     event.respondWith(fetch(event.request));
