@@ -179,8 +179,8 @@ export const Geolocation = {
 /** Cache for yr.no location URLs (coordinate key -> URL) */
 const yrnoUrlCache = new Map();
 
-/** Maximum distance (in degrees, ~5km) to accept a yr.no location match */
-const YRNO_MAX_DISTANCE = 0.05;
+/** Maximum distance in km to accept a yr.no location match */
+const YRNO_MAX_DISTANCE_KM = 5;
 
 /**
  * Searches yr.no for a location name and returns the closest match to given coordinates.
@@ -191,30 +191,29 @@ const YRNO_MAX_DISTANCE = 0.05;
  */
 async function searchYrnoLocation(query, lat, lon) {
     try {
-        const apiUrl = `${PROXY_URL}${encodeURIComponent(`https://www.yr.no/api/v0/locations/Search?q=${query}&language=en`)}`;
+        const apiUrl = `${PROXY_URL}${encodeURIComponent(`https://www.yr.no/api/v0/locations/Search?q=${encodeURIComponent(query)}&language=en`)}`;
         const response = await fetch(apiUrl);
-        if (response.ok) {
-            const data = await response.json();
-            const locations = data?._embedded?.location;
-            if (locations?.length > 0) {
-                let closest = null;
-                let minDist = Infinity;
-                for (const loc of locations) {
-                    if (loc.id && loc.position) {
-                        const dist = Math.hypot(loc.position.lat - lat, loc.position.lon - lon);
-                        if (dist < minDist) {
-                            minDist = dist;
-                            closest = loc;
-                        }
-                    }
-                }
-                if (closest) {
-                    return { id: closest.id, dist: minDist };
+        if (!response.ok) {
+            warn(`yr.no search "${query}": HTTP ${response.status}`);
+            return null;
+        }
+        const data = await response.json();
+        const locations = data?._embedded?.location;
+        if (!locations?.length) return null;
+        let closest = null;
+        let minDist = Infinity;
+        for (const loc of locations) {
+            if (loc.id && loc.position) {
+                const dist = haversineDistance(lat, lon, loc.position.lat, loc.position.lon);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closest = loc;
                 }
             }
         }
+        if (closest) return { id: closest.id, dist: minDist };
     } catch (e) {
-        // Ignore errors, will fall back to coordinate URL
+        warn(`yr.no search "${query}": ${e.message}`);
     }
     return null;
 }
@@ -262,7 +261,7 @@ async function reverseGeocode(lat, lon) {
             return queries.length > 0 ? queries : null;
         }
     } catch (e) {
-        // Ignore errors, will fall back to coordinate URL
+        warn(`Nominatim reverse geocode: ${e.message}`);
     }
     return null;
 }
@@ -336,12 +335,14 @@ export async function getYrnoForecastUrl(lat, lon, stationName = null) {
         .filter(Boolean)
         .sort((a, b) => a.dist - b.dist)[0];
 
-    if (best && best.dist < YRNO_MAX_DISTANCE) {
+    if (best && best.dist < YRNO_MAX_DISTANCE_KM) {
         const url = `https://www.yr.no/en/forecast/daily-table/${best.id}`;
+        log(`yr.no: ${best.id} (${best.dist.toFixed(1)}km)`);
         yrnoUrlCache.set(cacheKey, url);
         return url;
     }
 
+    warn(`yr.no: no close match (best: ${best ? best.dist.toFixed(1) + 'km' : 'none'}), using coordinate fallback`);
     yrnoUrlCache.set(cacheKey, fallbackUrl);
     return fallbackUrl;
 }
