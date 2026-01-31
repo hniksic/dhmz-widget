@@ -170,6 +170,30 @@ export function getSelectedLocation() {
 /** Save selected location to localStorage */
 export function setSelectedLocation(location) {
     localStorage.setItem(getLocationKey(), location);
+    // Clear cached coords; they'll be re-saved on next render
+    localStorage.removeItem(getLocationKey() + '-coords');
+}
+
+/**
+ * Save coordinates of the currently displayed station.
+ * Used to find the nearest station if the saved station disappears from the data.
+ */
+export function setSelectedLocationCoords(lat, lon) {
+    localStorage.setItem(getLocationKey() + '-coords', JSON.stringify({ lat, lon }));
+}
+
+/**
+ * Get saved coordinates of the selected station.
+ * @returns {{lat: number, lon: number} | null}
+ */
+export function getSelectedLocationCoords() {
+    const raw = localStorage.getItem(getLocationKey() + '-coords');
+    if (!raw) return null;
+    try {
+        const { lat, lon } = JSON.parse(raw);
+        if (isFinite(lat) && isFinite(lon)) return { lat, lon };
+    } catch { /* ignore */ }
+    return null;
 }
 
 // =============================================================================

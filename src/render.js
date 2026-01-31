@@ -7,10 +7,11 @@
 import {
     getSourceConfig, cachedStations, STALE_THRESHOLD_MS, OLD_THRESHOLD_MS,
     DISTANCE_WARNING_THRESHOLD, NEAREST_LOCATION, DATA_SOURCE,
-    getSelectedLocation, setSelectedLocation
+    getSelectedLocation, setSelectedLocation,
+    getSelectedLocationCoords, setSelectedLocationCoords
 } from './config.js';
 import { log, warn } from './log.js';
-import { Geolocation, getStationForLocation, getYrnoForecastUrl } from './geo.js';
+import { Geolocation, getStationForLocation, findNearestStation, getYrnoForecastUrl } from './geo.js';
 import { hide, show, setText, LocationPicker } from './ui.js';
 import { fetchCurrentWeather } from './current-weather.js';
 import { generateWeatherDescription } from './nlg.js';
@@ -85,7 +86,9 @@ function formatMeasurementTime(measurementTime) {
  * @param {number|null} distance - Distance to station in km (only for "nearest" mode)
  */
 async function render(station, distance) {
-    // Increment render generation to invalidate any pending async operations
+    // Increment render generation to invalidate any pending async operations.
+    // All async operations in this function must check `thisRender === renderGeneration`
+    // before writing to the DOM to prevent stale updates.
     const thisRender = ++renderGeneration;
 
     hide('error');
@@ -178,19 +181,13 @@ async function render(station, distance) {
     const forecastLink = document.getElementById('forecast-link');
     if (forecastLink) {
         forecastLink.style.visibility = 'hidden';
-        const lat = station.lat;
-        const lon = station.lon;
-        if (isFinite(lat) && isFinite(lon)) {
-            getYrnoForecastUrl(lat, lon, station.name).then(url => {
-                // Check if we're still showing the same station (user may have switched)
-                if (forecastLink.dataset.lat === String(lat) && forecastLink.dataset.lon === String(lon)) {
+        if (isFinite(station.lat) && isFinite(station.lon)) {
+            getYrnoForecastUrl(station.lat, station.lon, station.name).then(url => {
+                if (thisRender === renderGeneration) {
                     forecastLink.href = url;
                     forecastLink.style.visibility = 'visible';
                 }
             });
-            // Store the coordinates we're fetching for
-            forecastLink.dataset.lat = String(lat);
-            forecastLink.dataset.lon = String(lon);
         }
     }
 
@@ -252,18 +249,37 @@ export async function renderSelectedStation() {
         return;
     }
 
-    // Fall back to NEAREST_LOCATION if selected station no longer exists
+    // Handle station that disappeared from the data (e.g., temporarily offline).
+    // Use saved coords to find the nearest available station, but keep the original
+    // station name in localStorage so it's automatically restored if it reappears.
     if (!result) {
         const notFoundStation = selectedLocation;
-        selectedLocation = NEAREST_LOCATION;
-        setSelectedLocation(selectedLocation);
-        LocationPicker.updateSelection(selectedLocation);
-        // If still no station (no coords), just return and wait
-        result = getStationForLocation(cachedStations, selectedLocation);
-        if (result) {
-            warn(`Station "${notFoundStation}" not found, using nearest`);
+        const savedCoords = getSelectedLocationCoords();
+        if (savedCoords) {
+            const nearest = findNearestStation(cachedStations, savedCoords.lat, savedCoords.lon);
+            if (nearest) {
+                warn(`Station "${notFoundStation}" not found, showing nearest "${nearest.name}" by saved coords`);
+                result = { station: cachedStations[nearest.name], distance: nearest.distance };
+                // Don't update localStorage - keep original name for restoration
+                LocationPicker.updateSelection(notFoundStation);
+            }
         }
-        if (!result) return;
+        // No saved coords - fall back to NEAREST_LOCATION
+        if (!result) {
+            selectedLocation = NEAREST_LOCATION;
+            setSelectedLocation(selectedLocation);
+            LocationPicker.updateSelection(selectedLocation);
+            result = getStationForLocation(cachedStations, selectedLocation);
+            if (result) {
+                warn(`Station "${notFoundStation}" not found, using nearest`);
+            }
+            if (!result) return;
+        }
+    }
+
+    // Save station coords so we can find nearest if this station disappears
+    if (result.station.lat != null && result.station.lon != null) {
+        setSelectedLocationCoords(result.station.lat, result.station.lon);
     }
 
     log('Displaying:', result.station.name, result.station.temperature + '°C');

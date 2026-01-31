@@ -22,8 +22,11 @@ import { StationMap } from './map.js';
 
 /**
  * Fetches weather data from the configured source via CORS proxy and updates the display.
+ * @param {boolean} [skipRender=false] - If true, skip rendering after fetch.
+ *        Used by SourceSwitcher.toggle() which handles rendering itself after
+ *        mapping the station to the new source.
  */
-async function fetchWeatherData() {
+async function fetchWeatherData(skipRender = false) {
     // Prevent concurrent fetches (e.g., click + focus firing together)
     if (fetchInProgress) {
         return;
@@ -59,7 +62,9 @@ async function fetchWeatherData() {
 
         LocationPicker.populate(stationNames);
         Geolocation.request();
-        renderSelectedStation();
+        if (!skipRender) {
+            renderSelectedStation();
+        }
 
     } catch (error) {
         warn('Fetch error:', error.message);
@@ -88,7 +93,8 @@ LocationPicker.onSelect = renderSelectedStation;
 LocationPicker.getStationMap = () => StationMap;
 
 // Wire SourceSwitcher callbacks
-SourceSwitcher.onToggle = fetchWeatherData;
+// Pass skipRender=true because toggle() handles rendering after mapping the station
+SourceSwitcher.onToggle = () => fetchWeatherData(true);
 SourceSwitcher.onRender = renderSelectedStation;
 
 // =============================================================================
