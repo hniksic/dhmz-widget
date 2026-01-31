@@ -86,8 +86,14 @@ export function getSourceConfig() {
     return DATA_SOURCES[DATA_SOURCE];
 }
 
-/** CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers) */
-export const PROXY_URL = 'https://api.codetabs.com/v1/proxy?quest=';
+/**
+ * CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers).
+ * Alternatives if the current proxy goes down:
+ * - https://api.codetabs.com/v1/proxy?quest=
+ * - https://proxy.corsfix.com/?            (free tier, 60 req/min, no encodeURIComponent)
+ * - https://api.allorigins.win/raw?url=    (unreliable, sometimes down)
+ */
+export const PROXY_URL = 'https://api.cors.lol/?url=';
 
 // =============================================================================
 // CONSTANTS
