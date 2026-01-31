@@ -644,11 +644,9 @@ export const StationMap = {
             event.preventDefault();
             const map = StationMap;
 
-            const zoomFactor = 1.05;
-            const direction = event.deltaY < 0 ? 1 : -1;
-            const newScale = direction > 0
-                ? map.zoom.scale * zoomFactor
-                : map.zoom.scale / zoomFactor;
+            // Use actual deltaY - mouse wheels have large values (~100), touchpads have small ones
+            const zoomFactor = Math.pow(1.002, -event.deltaY);
+            const newScale = map.zoom.scale * zoomFactor;
 
             const { x, y } = map.eventToSvg(event);
             map.zoomTo(newScale, x, y);
