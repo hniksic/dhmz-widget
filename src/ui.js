@@ -104,6 +104,11 @@ export const LocationPicker = {
         this.getDropdown().hidden = false;
         // Push state so Android back button closes dropdown instead of exiting app
         history.pushState({ dropdown: true }, '');
+        // Scroll selected station into view
+        const selected = this.getDropdown().querySelector('.location-option.selected');
+        if (selected) {
+            selected.scrollIntoView({ block: 'nearest' });
+        }
     },
 
     /**
@@ -134,6 +139,28 @@ export const LocationPicker = {
         const dropdown = this.getDropdown();
         const currentValue = getSelectedLocation();
         const self = this;
+        const collator = new Intl.Collator('hr');
+
+        // Build entry list, inserting grayed-out entry for selected station
+        // if it's not in the current source's station list (e.g. came from other source)
+        const entries = stationNames.map(name => ({
+            name, label: name, clickable: true, selected: name === currentValue,
+        }));
+        if (currentValue !== NEAREST_LOCATION && !stationNames.includes(currentValue)) {
+            // Insert at correct alphabetical position
+            let lo = 0, hi = entries.length;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (collator.compare(entries[mid].name, currentValue) < 0) lo = mid + 1;
+                else hi = mid;
+            }
+            entries.splice(lo, 0, {
+                name: currentValue,
+                label: currentValue,
+                clickable: false,
+                selected: true,
+            });
+        }
 
         dropdown.innerHTML = '';
 
@@ -160,14 +187,19 @@ export const LocationPicker = {
         });
         dropdown.appendChild(mapOpt);
 
-        // Add all station options
-        stationNames.forEach(name => {
+        // Add all station options (including unavailable entries)
+        entries.forEach(entry => {
             const opt = document.createElement('div');
-            opt.className = 'location-option' + (name === currentValue ? ' selected' : '');
+            let cls = 'location-option';
+            if (entry.selected) cls += ' selected';
+            if (!entry.clickable) cls += ' unavailable';
+            opt.className = cls;
             opt.setAttribute('role', 'option');
-            opt.dataset.value = name;
-            opt.textContent = name;
-            opt.addEventListener('click', () => self.select(name));
+            opt.dataset.value = entry.name;
+            opt.textContent = entry.label;
+            if (entry.clickable) {
+                opt.addEventListener('click', () => self.select(entry.name));
+            }
             dropdown.appendChild(opt);
         });
     },

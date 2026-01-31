@@ -508,13 +508,14 @@ body {
 }
 
 .location-option {
-    padding: 10px 14px;
+    padding: 10px 14px 10px 30px;
     color: rgba(255, 255, 255, 0.7);
     font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.15s;
     border-radius: 10px;
     margin: 2px 0;
+    position: relative;
 }
 
 .location-option:hover,
@@ -526,6 +527,21 @@ body {
 .location-option.selected {
     background: rgba(255, 255, 255, 0.12);
     color: #fff;
+}
+
+.location-option.selected::before {
+    content: '✓';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+}
+
+.location-option.unavailable {
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+    cursor: default;
 }
 
 .location-option.map-option {

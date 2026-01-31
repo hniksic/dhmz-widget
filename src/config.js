@@ -53,7 +53,6 @@ export function setDataSource(source) {
 export const DATA_SOURCES = {
     dhmz: {
         url: 'https://vrijeme.hr/hrvatska1_n.xml',
-        locationKey: 'dhmz-location',
         // Station name uses hyphen separator (e.g., "Zagreb-Grič")
         nameSeparator: '-',
         // Only split these city prefixes (others like "Bilogora-Bjelovar" stay as-is)
@@ -71,7 +70,6 @@ export const DATA_SOURCES = {
     },
     pljusak: {
         url: 'https://pljusak.com/karta.php',
-        locationKey: 'pljusak-location',
         // Station name uses comma separator (e.g., "Zagreb, Podsused")
         nameSeparator: ', ',
         // null = always split on separator (all pljusak names with comma are "City, Location")
@@ -158,26 +156,24 @@ export function setLastRefresh(timestamp) {
 // LOCATION STORAGE
 // =============================================================================
 
-/** Get LocalStorage key for selected location (source-specific) */
-export function getLocationKey() {
-    return getSourceConfig().locationKey;
-}
+/** LocalStorage key for selected location (shared across sources) */
+const LOCATION_KEY = 'selected-location';
 
 /** Check if user has explicitly chosen a location */
 export function hasSelectedLocation() {
-    return localStorage.getItem(getLocationKey()) !== null;
+    return localStorage.getItem(LOCATION_KEY) !== null;
 }
 
 /** Get selected location from localStorage */
 export function getSelectedLocation() {
-    return localStorage.getItem(getLocationKey()) || NEAREST_LOCATION;
+    return localStorage.getItem(LOCATION_KEY) || NEAREST_LOCATION;
 }
 
 /** Save selected location to localStorage */
 export function setSelectedLocation(location) {
-    localStorage.setItem(getLocationKey(), location);
+    localStorage.setItem(LOCATION_KEY, location);
     // Clear cached coords; they'll be re-saved on next render
-    localStorage.removeItem(getLocationKey() + '-coords');
+    localStorage.removeItem(LOCATION_KEY + '-coords');
 }
 
 /**
@@ -185,7 +181,7 @@ export function setSelectedLocation(location) {
  * Used to find the nearest station if the saved station disappears from the data.
  */
 export function setSelectedLocationCoords(lat, lon) {
-    localStorage.setItem(getLocationKey() + '-coords', JSON.stringify({ lat, lon }));
+    localStorage.setItem(LOCATION_KEY + '-coords', JSON.stringify({ lat, lon }));
 }
 
 /**
@@ -193,7 +189,7 @@ export function setSelectedLocationCoords(lat, lon) {
  * @returns {{lat: number, lon: number} | null}
  */
 export function getSelectedLocationCoords() {
-    const raw = localStorage.getItem(getLocationKey() + '-coords');
+    const raw = localStorage.getItem(LOCATION_KEY + '-coords');
     if (!raw) return null;
     try {
         const { lat, lon } = JSON.parse(raw);
