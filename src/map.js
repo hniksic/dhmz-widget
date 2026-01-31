@@ -5,7 +5,8 @@
  */
 
 import {
-    cachedStations, getSelectedLocation, setSelectedLocation, NEAREST_LOCATION
+    cachedStations, getSelectedLocation, setSelectedLocation, NEAREST_LOCATION,
+    getSelectedLocationCoords
 } from './config.js';
 import { Geolocation, findNearestStation, haversineDistance } from './geo.js';
 import { LocationPicker, SourceSwitcher } from './ui.js';
@@ -344,9 +345,29 @@ export const StationMap = {
             dotsGroup.appendChild(circle);
         }
 
-        // Add user location marker if available
+        // Add ghost dot for selected station not in current source
+        if (selectedLocation !== NEAREST_LOCATION && !cachedStations[selectedLocation]) {
+            const ghostCoords = getSelectedLocationCoords();
+            if (ghostCoords) {
+                const { x, y } = this.latLonToSvg(ghostCoords.lat, ghostCoords.lon);
+                const ghost = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                ghost.setAttribute('cx', x);
+                ghost.setAttribute('cy', y);
+                ghost.setAttribute('r', 0.5);
+                ghost.setAttribute('class', 'station-dot ghost selected');
+                ghost.setAttribute('data-station', selectedLocation);
+                ghost.setAttribute('data-lat', ghostCoords.lat);
+                ghost.setAttribute('data-lon', ghostCoords.lon);
+                ghost.addEventListener('mouseenter', (e) => self.showTooltip(e, selectedLocation));
+                ghost.addEventListener('mouseleave', () => self.hideTooltip());
+                dotsGroup.appendChild(ghost);
+            }
+        }
+
+        // Add user location marker if available (also acts as "Najbliža" selector)
         if (coords) {
             const { x, y } = this.latLonToSvg(coords.lat, coords.lon);
+            const isSelected = selectedLocation === NEAREST_LOCATION;
 
             const pulse = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             pulse.setAttribute('cx', x);
@@ -361,9 +382,13 @@ export const StationMap = {
             dot.setAttribute('cx', x);
             dot.setAttribute('cy', y);
             dot.setAttribute('r', 0.5);
-            dot.setAttribute('class', 'user-dot');
+            dot.setAttribute('class', 'user-dot' + (isSelected ? ' selected' : ''));
             dot.setAttribute('data-lat', coords.lat);
             dot.setAttribute('data-lon', coords.lon);
+            dot.setAttribute('data-station', NEAREST_LOCATION);
+            dot.addEventListener('click', () => self.selectStation(NEAREST_LOCATION));
+            dot.addEventListener('mouseenter', (e) => self.showTooltip(e, LocationPicker.getLabel(NEAREST_LOCATION)));
+            dot.addEventListener('mouseleave', () => self.hideTooltip());
             userGroup.appendChild(dot);
         }
 
@@ -391,6 +416,16 @@ export const StationMap = {
                 nearest = name;
             }
         }
+
+        // Also consider the user's GPS location as the "Najbliža" candidate
+        const coords = Geolocation.coords;
+        if (coords) {
+            const dist = haversineDistance(lat, lon, coords.lat, coords.lon);
+            if (dist < minDist) {
+                nearest = NEAREST_LOCATION;
+            }
+        }
+
         return nearest;
     },
 
@@ -406,14 +441,15 @@ export const StationMap = {
 
         if (nearest !== this.highlight) {
             // Remove old highlight
-            document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
+            document.querySelectorAll('.station-dot.prehighlight, .user-dot.prehighlight').forEach(el => {
                 el.classList.remove('prehighlight');
                 el.setAttribute('r', 0.5);
             });
 
             // Add new highlight
             if (nearest) {
-                const dot = document.querySelector(`.station-dot[data-station="${nearest}"]`);
+                const dot = document.querySelector(`.station-dot[data-station="${nearest}"]`)
+                    || document.querySelector(`.user-dot[data-station="${nearest}"]`);
                 if (dot) {
                     dot.classList.add('prehighlight');
                     dot.setAttribute('r', 0.8);
@@ -426,7 +462,7 @@ export const StationMap = {
 
     /** Clear prehighlight state */
     clearHighlight() {
-        document.querySelectorAll('.station-dot.prehighlight').forEach(el => {
+        document.querySelectorAll('.station-dot.prehighlight, .user-dot.prehighlight').forEach(el => {
             el.classList.remove('prehighlight');
             el.setAttribute('r', 0.5);
         });
@@ -435,7 +471,7 @@ export const StationMap = {
 
     /** Clear tapped station state */
     clearTapped() {
-        document.querySelectorAll('.station-dot.tapped').forEach(el => {
+        document.querySelectorAll('.station-dot.tapped, .user-dot.tapped').forEach(el => {
             el.classList.remove('tapped');
             el.setAttribute('r', 0.5);
         });
@@ -455,7 +491,8 @@ export const StationMap = {
         } else {
             this.clearTapped();
             this.tapped = stationName;
-            const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
+            const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`)
+                || document.querySelector(`.user-dot[data-station="${stationName}"]`);
             if (dot) {
                 dot.classList.add('tapped');
                 dot.setAttribute('r', 0.8);
@@ -501,7 +538,8 @@ export const StationMap = {
      */
     showLabel(stationName) {
         const label = document.getElementById('station-label');
-        const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`);
+        const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`)
+            || document.querySelector(`.user-dot[data-station="${stationName}"]`);
         if (!label || !dot) return;
 
         const svg = document.getElementById('station-map');

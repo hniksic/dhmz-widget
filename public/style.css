@@ -240,8 +240,24 @@ body {
     fill: #ffdd57;
 }
 
+.station-dot.ghost {
+    fill: rgba(255, 255, 255, 0.25);
+    cursor: default;
+}
+
+.user-dot.selected {
+    stroke: #4ecdc4;
+    stroke-width: 0.4;
+}
+
+.user-dot.tapped,
+.user-dot.prehighlight {
+    fill: #ffdd57;
+}
+
 .user-dot {
     fill: #3b82f6;
+    cursor: pointer;
 }
 
 .user-dot-pulse {
@@ -251,8 +267,8 @@ body {
 }
 
 @keyframes pulse {
-    0% { r: 6; opacity: 0.4; }
-    100% { r: 20; opacity: 0; }
+    0% { r: 0.5; opacity: 0.4; }
+    100% { r: 3; opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
