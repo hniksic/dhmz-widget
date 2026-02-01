@@ -240,6 +240,11 @@ body {
     fill: #ffdd57;
 }
 
+.station-dot.nearest-highlight {
+    stroke: #3b82f6;
+    stroke-width: 0.4;
+}
+
 .station-dot.ghost {
     fill: rgba(255, 255, 255, 0.25);
     cursor: default;

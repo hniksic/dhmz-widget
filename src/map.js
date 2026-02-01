@@ -387,8 +387,14 @@ export const StationMap = {
             dot.setAttribute('data-lon', coords.lon);
             dot.setAttribute('data-station', NEAREST_LOCATION);
             dot.addEventListener('click', () => self.selectStation(NEAREST_LOCATION));
-            dot.addEventListener('mouseenter', (e) => self.showTooltip(e, LocationPicker.getLabel(NEAREST_LOCATION)));
-            dot.addEventListener('mouseleave', () => self.hideTooltip());
+            dot.addEventListener('mouseenter', (e) => {
+                self.showTooltip(e, self.getNearestLabel());
+                self.highlightNearestStation(true);
+            });
+            dot.addEventListener('mouseleave', () => {
+                self.hideTooltip();
+                self.highlightNearestStation(false);
+            });
             userGroup.appendChild(dot);
         }
 
@@ -455,6 +461,8 @@ export const StationMap = {
                     dot.setAttribute('r', 0.8);
                 }
             }
+            // Highlight the nearest station when hovering near user dot
+            this.highlightNearestStation(nearest === NEAREST_LOCATION);
             this.highlight = nearest;
         }
         return nearest;
@@ -477,6 +485,42 @@ export const StationMap = {
         });
         this.tapped = null;
         this.hideLabel();
+        this.highlightNearestStation(false);
+    },
+
+    /**
+     * Get tooltip/label text for the user location dot.
+     * @returns {string} e.g. "Prati najbližu (Krapina)" or "Prati najbližu"
+     */
+    getNearestLabel() {
+        const coords = Geolocation.coords;
+        if (coords && cachedStations) {
+            const nearest = findNearestStation(cachedStations, coords.lat, coords.lon);
+            if (nearest) return `Prati najbližu (${nearest.name})`;
+        }
+        return 'Prati najbližu';
+    },
+
+    /**
+     * Add or remove nearest-highlight class on the nearest station dot.
+     * Creates a visual link between the user dot and the nearest station.
+     * @param {boolean} show - Whether to add or remove the highlight
+     */
+    highlightNearestStation(show) {
+        // Always clear existing highlights first
+        document.querySelectorAll('.station-dot.nearest-highlight').forEach(el => {
+            el.classList.remove('nearest-highlight');
+        });
+        if (show) {
+            const coords = Geolocation.coords;
+            if (coords && cachedStations) {
+                const nearest = findNearestStation(cachedStations, coords.lat, coords.lon);
+                if (nearest) {
+                    const dot = document.querySelector(`.station-dot[data-station="${nearest.name}"]`);
+                    if (dot) dot.classList.add('nearest-highlight');
+                }
+            }
+        }
     },
 
     /**
@@ -497,6 +541,8 @@ export const StationMap = {
                 dot.classList.add('tapped');
                 dot.setAttribute('r', 0.8);
             }
+            // Highlight nearest station when tapping user dot
+            this.highlightNearestStation(stationName === NEAREST_LOCATION);
             this.showLabel(stationName);
         }
     },
@@ -553,7 +599,7 @@ export const StationMap = {
         const x = (cx / this.config.viewBox.width) * svgRect.width + (svgRect.left - containerRect.left);
         const y = (cy / this.config.viewBox.height) * svgRect.height + (svgRect.top - containerRect.top);
 
-        label.textContent = stationName;
+        label.textContent = stationName === NEAREST_LOCATION ? this.getNearestLabel() : stationName;
         label.hidden = false;
         label.style.left = `${x}px`;
         label.style.top = `${y - 35}px`;
@@ -658,7 +704,8 @@ export const StationMap = {
             const nearest = map.updateHighlight(x, y);
 
             if (nearest) {
-                map.showTooltip(event, nearest);
+                const label = nearest === NEAREST_LOCATION ? map.getNearestLabel() : nearest;
+                map.showTooltip(event, label);
             } else {
                 map.hideTooltip();
             }
