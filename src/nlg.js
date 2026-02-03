@@ -701,7 +701,7 @@ export function generateWeatherDescription(temp, humidity, windSpeed, dewpoint, 
     }
 
     // Fall back to temperature-based templates
-    return selectTemperatureTemplate(effTemp, windSpeed, humidity, timeOfDay, context);
+    return selectTemperatureTemplate(effTemp, windSpeed, humidity, timeOfDay, context, weather?.category);
 }
 
 function selectWeatherCodeTemplate(weather, effTemp, timeOfDay, context) {
@@ -734,12 +734,19 @@ function selectWeatherCodeTemplate(weather, effTemp, timeOfDay, context) {
     return fillTemplate(selected.pattern, context);
 }
 
-function selectTemperatureTemplate(effTemp, windSpeed, humidity, timeOfDay, context) {
+function selectTemperatureTemplate(effTemp, windSpeed, humidity, timeOfDay, context, weatherCategory = null) {
+    // Skip humidity-focused templates during precipitation (humidity is obviously high)
+    const precipitationCategories = ['drizzle', 'rain', 'snow', 'thunderstorm'];
+    const isPrecipitation = precipitationCategories.includes(weatherCategory);
+
     const applicable = TEMPLATES.filter(t => {
         if (effTemp < t.tempRange[0] || effTemp > t.tempRange[1]) return false;
         if (t.minWind !== undefined && (windSpeed ?? 0) < t.minWind) return false;
         if (t.maxWind !== undefined && (windSpeed ?? 0) > t.maxWind) return false;
-        if (t.minHumidity !== undefined && (humidity ?? DEFAULT_HUMIDITY) < t.minHumidity) return false;
+        if (t.minHumidity !== undefined) {
+            if (isPrecipitation) return false;  // Don't mention humidity during precipitation
+            if ((humidity ?? DEFAULT_HUMIDITY) < t.minHumidity) return false;
+        }
         if (t.maxHumidity !== undefined && (humidity ?? DEFAULT_HUMIDITY) > t.maxHumidity) return false;
         if (t.timeOfDay !== undefined && t.timeOfDay !== timeOfDay) return false;
         return true;
