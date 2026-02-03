@@ -23,9 +23,9 @@ function getSavedSource() {
     if (urlSource === 'pljusak' || urlSource === 'dhmz') {
         return urlSource;
     }
-    // Otherwise use localStorage, defaulting to 'dhmz'
+    // Otherwise use localStorage, defaulting to 'pljusak'
     const saved = localStorage.getItem(SOURCE_KEY);
-    return saved === 'pljusak' ? 'pljusak' : 'dhmz';
+    return saved === 'dhmz' ? 'dhmz' : 'pljusak';
 }
 
 /**
