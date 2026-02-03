@@ -22,7 +22,7 @@ body {
 
 .widget {
     position: relative;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(45, 26, 45);
     backdrop-filter: blur(10px);
     border-radius: 24px;
     padding: 32px;
@@ -100,7 +100,7 @@ body {
 
 .map-container {
     position: relative;
-    background: rgba(20, 20, 40, 0.95);
+    background: rgba(40, 20, 36, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -200,14 +200,14 @@ body {
 
 #croatia-outline path {
     fill: rgba(255, 255, 255, 0.08);
-    stroke: #464655;
+    stroke: #544551;
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
 }
 
 #neighbor-outlines path {
     fill: none;
-    stroke: #3a3a48;
+    stroke: #473944;
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
 }
@@ -298,7 +298,7 @@ body {
 .station-label {
     position: absolute;
     background: rgba(255, 221, 87, 0.95);
-    color: #1a1a2e;
+    color: #251a23;
     padding: 6px 12px;
     border-radius: 8px;
     font-size: 0.875rem;
@@ -473,7 +473,7 @@ body {
     left: 0;
     right: auto;
     margin-top: 8px;
-    background: rgba(20, 20, 40, 0.95);
+    background: rgba(40, 20, 36, 0.95);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -614,7 +614,7 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: rgba(26, 26, 46, 0.92);
+    background: rgba(46, 26, 42, 0.92);
     border-radius: 24px;
     text-align: center;
     padding: 24px;
@@ -658,7 +658,7 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    background: rgba(30, 30, 50, 0.95);
+    background: rgba(51, 30, 46, 0.95);
     color: rgba(255, 200, 100, 0.9);
     padding: 10px 14px;
     border-radius: 12px;
