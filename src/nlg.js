@@ -258,13 +258,13 @@ const SYNONYMS = {
         { word: 'sparina', weight: 0.6, minHumidity: 60 },
     ],
     cold_adj: [
+        // These work as standalone predicates: "hladno je", "Kiša i hladno"
         { word: 'hladan', weight: 1.0 },
         { word: 'studen', weight: 0.7, maxTemp: 0 },
         { word: 'leden', weight: 0.5, maxTemp: -3 },
         { word: 'prohladan', weight: 0.9, minTemp: 5 },
-        { word: 'oštar', weight: 0.6, minWind: 3 },
-        { word: 'prodoran', weight: 0.5, minWind: 4 },
-        { word: 'zimski', weight: 0.6 },
+        // Note: oštar, prodoran, zimski require a noun (oštar vjetar, zimski dan)
+        // so they can't be used in templates like "Kiša i {cold_adj:nom:n}"
     ],
     cool_adj: [
         { word: 'svjež', weight: 1.0 },
@@ -302,9 +302,10 @@ const SYNONYMS = {
         { word: 'prodoran', weight: 0.5, minWind: 6 },
     ],
     humid_adj: [
+        // These work as standalone predicates: "vlažno je", "sparno je"
         { word: 'vlažan', weight: 1.0 },
-        { word: 'prodoran', weight: 0.7, maxTemp: 12 },
-        { word: 'sparni', weight: 0.7, minTemp: 25 },
+        { word: 'sparni', weight: 0.8, minTemp: 25 },
+        // Note: prodoran requires a noun (prodorna vlaga, prodorna hladnoća)
     ],
     weather_noun: [
         { word: 'vrijeme', weight: 1.0 },
