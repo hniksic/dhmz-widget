@@ -466,18 +466,25 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Pretežno sunčano', weight: 0.8 },
         { pattern: 'Vedro nebo', weight: 0.7 },
         { pattern: '{clear_adj:nom:n} vrijeme', weight: 0.7 },
-        { pattern: '{clear_adj:nom:m} dan', weight: 0.7, timeOfDay: 'afternoon' },
-        { pattern: 'Vedro i {warm_adj:nom:n}', weight: 0.6, tempRange: [20, 30] },
-        { pattern: 'Sunčano i {hot_adj:nom:n}', weight: 0.6, tempRange: [28, 45] },
+        { pattern: 'Sunce sja', weight: 0.5 },
+        { pattern: 'Nebo bez oblačka', weight: 0.4 },
+        // Temperature combos
         { pattern: 'Vedro i {cold_adj:nom:n}', weight: 0.6, tempRange: [-20, 5] },
         { pattern: 'Sunčano, ali {cold_adj:nom:n}', weight: 0.5, tempRange: [-10, 8] },
-        { pattern: 'Sunce sja', weight: 0.5 },
-        { pattern: 'Sunce grije', weight: 0.5, tempRange: [20, 35] },
+        { pattern: 'Vedro i {cool_adj:nom:n}', weight: 0.6, tempRange: [5, 15] },
+        { pattern: 'Sunčano i {mild_adj:nom:n}', weight: 0.6, tempRange: [12, 20] },
+        { pattern: 'Vedro i {warm_adj:nom:n}', weight: 0.6, tempRange: [20, 30] },
+        { pattern: 'Sunce grije', weight: 0.5, tempRange: [18, 35] },
+        { pattern: 'Sunčano i {hot_adj:nom:n}', weight: 0.6, tempRange: [28, 45] },
         { pattern: 'Sunce prži', weight: 0.4, tempRange: [32, 50] },
-        { pattern: 'Nebo bez oblačka', weight: 0.4 },
+        // Time of day
         { pattern: 'Sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
+        { pattern: '{clear_adj:nom:n} jutro', weight: 0.5, timeOfDay: 'morning' },
+        { pattern: '{clear_adj:nom:m} dan', weight: 0.6, timeOfDay: 'afternoon' },
         { pattern: 'Vedra večer', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: 'Sunčana večer', weight: 0.5, timeOfDay: 'evening' },
         { pattern: 'Vedra noć', weight: 0.6, timeOfDay: 'night' },
+        { pattern: 'Zvjezdana noć', weight: 0.4, timeOfDay: 'night' },
     ],
 
     partly_cloudy: [
@@ -485,11 +492,18 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Promjenljivo oblačno', weight: 1.0 },
         { pattern: 'Umjereno oblačno', weight: 0.8 },
         { pattern: 'Sunčano uz umjerenu naoblaku', weight: 0.7 },
-        { pattern: 'Djelomice sunčano i {warm_adj:nom:n}', weight: 0.5, tempRange: [20, 30] },
-        { pattern: 'Promjenljivo oblačno i {cold_adj:nom:n}', weight: 0.5, tempRange: [-10, 10] },
-        { pattern: 'Djelomice sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
         { pattern: 'Oblaci i sunce', weight: 0.6 },
         { pattern: 'Povremeno sunce', weight: 0.5 },
+        // Temperature combos
+        { pattern: 'Djelomice sunčano i {warm_adj:nom:n}', weight: 0.6, tempRange: [20, 30] },
+        { pattern: 'Promjenljivo oblačno i {cold_adj:nom:n}', weight: 0.6, tempRange: [-10, 10] },
+        { pattern: 'Djelomice sunčano i {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
+        { pattern: 'Promjenljivo oblačno, {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
+        // Time of day
+        { pattern: 'Djelomice sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
+        { pattern: 'Promjenljivo oblačno popodne', weight: 0.5, timeOfDay: 'afternoon' },
+        { pattern: 'Djelomice vedra večer', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: 'Promjenljivo oblačna noć', weight: 0.5, timeOfDay: 'night' },
     ],
 
     cloudy: [
@@ -497,14 +511,21 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Pretežno oblačno', weight: 0.9 },
         { pattern: '{cloudy_adj:nom:n}', weight: 0.7 },
         { pattern: '{cloudy_adj:nom:n} vrijeme', weight: 0.6 },
-        { pattern: '{cloudy_adj:nom:m} dan', weight: 0.6, timeOfDay: 'afternoon' },
-        { pattern: 'Oblačno i {cold_adj:nom:n}', weight: 0.6, tempRange: [-10, 10] },
-        { pattern: 'Oblačno i {warm_adj:nom:n}', weight: 0.5, tempRange: [20, 30] },
         { pattern: 'Tmurno', weight: 0.5 },
         { pattern: 'Sivo nebo', weight: 0.4 },
         { pattern: 'Oblaci dominiraju', weight: 0.3 },
-        { pattern: 'Oblačno jutro', weight: 0.5, timeOfDay: 'morning' },
         { pattern: 'Gusti oblaci', weight: 0.5 },
+        // Temperature combos
+        { pattern: 'Oblačno i {cold_adj:nom:n}', weight: 0.6, tempRange: [-10, 10] },
+        { pattern: 'Oblačno i {warm_adj:nom:n}', weight: 0.5, tempRange: [20, 30] },
+        { pattern: 'Oblačno, {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
+        // Time of day
+        { pattern: 'Oblačno jutro', weight: 0.6, timeOfDay: 'morning' },
+        { pattern: '{cloudy_adj:nom:m} dan', weight: 0.6, timeOfDay: 'afternoon' },
+        { pattern: 'Oblačna večer', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: '{cloudy_adj:nom:f} večer', weight: 0.5, timeOfDay: 'evening' },
+        { pattern: 'Oblačna noć', weight: 0.6, timeOfDay: 'night' },
+        { pattern: 'Tmurna noć', weight: 0.5, timeOfDay: 'night' },
     ],
 
     fog: [
@@ -512,11 +533,18 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Gusta magla', weight: 0.7 },
         { pattern: 'Smanjena vidljivost', weight: 0.6 },
         { pattern: 'Maglovito', weight: 0.8 },
-        { pattern: 'Jutarnja magla', weight: 0.8, timeOfDay: 'morning' },
-        { pattern: 'Noćna magla', weight: 0.6, timeOfDay: 'night' },
         { pattern: 'Magla prekriva', weight: 0.4 },
         { pattern: 'Gusto kao mlijeko', weight: 0.3 },
-        { pattern: 'Magla i {cold_adj:nom:n}', weight: 0.5, tempRange: [-5, 8] },
+        // Temperature combos
+        { pattern: 'Magla i {cold_adj:nom:n}', weight: 0.6, tempRange: [-5, 8] },
+        { pattern: '{cold_adj:nom:f} magla', weight: 0.5, tempRange: [-5, 5] },
+        // Time of day
+        { pattern: 'Jutarnja magla', weight: 0.8, timeOfDay: 'morning' },
+        { pattern: 'Maglovito jutro', weight: 0.6, timeOfDay: 'morning' },
+        { pattern: 'Večernja magla', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: 'Maglovita večer', weight: 0.5, timeOfDay: 'evening' },
+        { pattern: 'Noćna magla', weight: 0.6, timeOfDay: 'night' },
+        { pattern: 'Maglovita noć', weight: 0.5, timeOfDay: 'night' },
     ],
 
     drizzle: [
@@ -608,12 +636,21 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Grmljavinsko nevrijeme', weight: 0.7 },
         { pattern: 'Oluja', weight: 0.7 },
         { pattern: 'Grmljavinski pljusak', weight: 0.6 },
-        { pattern: 'Grmljavina s tučom', weight: 1.0, hail: true },
-        { pattern: 'Tuča', weight: 0.9, hail: true },
-        { pattern: 'Nevrijeme s tučom', weight: 0.7, hail: true },
         { pattern: 'Grmi i sijeva', weight: 0.5 },
         { pattern: 'Olujno nevrijeme', weight: 0.4 },
         { pattern: 'Munje paraju nebo', weight: 0.3 },
+        // With hail
+        { pattern: 'Grmljavina s tučom', weight: 1.0, hail: true },
+        { pattern: 'Tuča', weight: 0.9, hail: true },
+        { pattern: 'Nevrijeme s tučom', weight: 0.7, hail: true },
+        // Temperature combos (summer storms)
+        { pattern: 'Ljetna grmljavina', weight: 0.5, tempRange: [22, 40] },
+        { pattern: 'Oluja i {hot_adj:nom:n}', weight: 0.5, tempRange: [25, 40] },
+        // Time of day
+        { pattern: 'Noćna oluja', weight: 0.6, timeOfDay: 'night' },
+        { pattern: 'Grmljavina u noći', weight: 0.5, timeOfDay: 'night' },
+        { pattern: 'Večernja grmljavina', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: 'Popodnevna oluja', weight: 0.5, timeOfDay: 'afternoon' },
     ],
 };
 
