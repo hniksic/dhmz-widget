@@ -5,7 +5,7 @@
  */
 
 import {
-    DATA_SOURCE, PROXY_URL, getSourceConfig, cachedStations, setCachedStations,
+    DATA_SOURCE, fetchViaProxy, getSourceConfig, cachedStations, setCachedStations,
     fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL
 } from './config.js';
 import { log, warn } from './log.js';
@@ -35,18 +35,13 @@ async function fetchWeatherData(skipRender = false) {
     setLastRefresh(Date.now());
 
     const cacheBuster = `?_=${Date.now()}`;
-    const fetchUrl = PROXY_URL + encodeURIComponent(getSourceConfig().url + cacheBuster);
     const widget = document.getElementById('widget');
 
     widget.classList.add('refreshing');
     log(`Fetching from ${DATA_SOURCE}...`);
 
     try {
-        const response = await fetch(fetchUrl);
-
-        if (!response.ok) {
-            throw new Error(`HTTP error: ${response.status}`);
-        }
+        const response = await fetchViaProxy(getSourceConfig().url + cacheBuster);
 
         const responseText = await response.text();
 

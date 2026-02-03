@@ -4,6 +4,8 @@
  * Data source configuration, constants, and shared state.
  */
 
+import { log, warn } from './log.js';
+
 // =============================================================================
 // DATA SOURCE CONFIGURATION
 // =============================================================================
@@ -84,14 +86,81 @@ export function getSourceConfig() {
     return DATA_SOURCES[DATA_SOURCE];
 }
 
+// =============================================================================
+// CORS PROXY
+// =============================================================================
+
 /**
- * CORS proxy (neither vrijeme.hr nor pljusak.com send CORS headers).
- * Alternatives if the current proxy goes down:
- * - https://api.codetabs.com/v1/proxy?quest=
- * - https://proxy.corsfix.com/?            (free tier, 60 req/min, no encodeURIComponent)
- * - https://api.allorigins.win/raw?url=    (unreliable, sometimes down)
+ * CORS proxies to try in order (neither vrijeme.hr nor pljusak.com send CORS headers).
+ * Each proxy has a name for logging, a baseUrl, and whether to encodeURIComponent the URL.
  */
-export const PROXY_URL = 'https://api.cors.lol/?url=';
+const CORS_PROXIES = [
+    { name: 'cors.lol', baseUrl: 'https://api.cors.lol/?url=', encode: true },
+    { name: 'codetabs', baseUrl: 'https://api.codetabs.com/v1/proxy?quest=', encode: true },
+];
+
+/** Mutable proxy order - successful proxies move to front, failed ones to back */
+let proxyOrder = [...CORS_PROXIES];
+
+/** Timeout per proxy attempt in milliseconds */
+const PROXY_TIMEOUT_MS = 1000;
+
+/**
+ * Fetches a URL via CORS proxy with automatic fallback.
+ * Tries each proxy in order, falling back on network error, HTTP error, or timeout.
+ * Learns from results: successful proxies move to front, failed ones to back.
+ * @param {string} url - The URL to fetch
+ * @param {RequestInit} [options] - Optional fetch options (will be merged with abort signal)
+ * @returns {Promise<Response>} The response from the first successful proxy
+ * @throws {Error} If all proxies fail
+ */
+export async function fetchViaProxy(url, options = {}) {
+    const errors = [];
+    const currentOrder = [...proxyOrder];  // Snapshot for this request
+
+    for (const proxy of currentOrder) {
+        const proxyUrl = proxy.baseUrl + (proxy.encode ? encodeURIComponent(url) : url);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(proxyUrl, {
+                ...options,
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            log(`Proxy ${proxy.name}: success`);
+
+            // Move successful proxy to front if not already there
+            const idx = proxyOrder.indexOf(proxy);
+            if (idx > 0) {
+                proxyOrder.splice(idx, 1);
+                proxyOrder.unshift(proxy);
+            }
+
+            return response;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            const reason = error.name === 'AbortError' ? 'timeout' : error.message;
+            warn(`Proxy ${proxy.name}: ${reason}`);
+            errors.push(`${proxy.name}: ${reason}`);
+
+            // Move failed proxy to back
+            const idx = proxyOrder.indexOf(proxy);
+            if (idx >= 0 && idx < proxyOrder.length - 1) {
+                proxyOrder.splice(idx, 1);
+                proxyOrder.push(proxy);
+            }
+        }
+    }
+
+    throw new Error(`All proxies failed: ${errors.join(', ')}`);
+}
 
 // =============================================================================
 // CONSTANTS

@@ -6,7 +6,7 @@
  */
 
 import {
-    NEAREST_LOCATION, getSourceConfig, PROXY_URL, cachedStations, lastRefresh,
+    NEAREST_LOCATION, getSourceConfig, fetchViaProxy, cachedStations, lastRefresh,
     hasSelectedLocation, getSelectedLocation, setSelectedLocation
 } from './config.js';
 import { log, warn } from './log.js';
@@ -191,12 +191,9 @@ const YRNO_MAX_DISTANCE_KM = 5;
  */
 async function searchYrnoLocation(query, lat, lon) {
     try {
-        const apiUrl = `${PROXY_URL}${encodeURIComponent(`https://www.yr.no/api/v0/locations/Search?q=${encodeURIComponent(query)}&language=en`)}`;
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-            warn(`yr.no search "${query}": HTTP ${response.status}`);
-            return null;
-        }
+        const apiUrl = `https://www.yr.no/api/v0/locations/Search?q=${encodeURIComponent(query)}&language=en`;
+        const response = await fetchViaProxy(apiUrl);
+        // fetchViaProxy throws on HTTP error, so we don't need to check response.ok
         const data = await response.json();
         const locations = data?._embedded?.location;
         if (!locations?.length) return null;
