@@ -524,51 +524,82 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Rosulja', weight: 0.8 },
         { pattern: 'Kiša rominja', weight: 0.7 },
         { pattern: 'Sipi kiša', weight: 0.6 },
+        { pattern: 'Kišica', weight: 0.6 },
+        { pattern: 'Kapljica po kapljica', weight: 0.4 },
+        // Freezing
         { pattern: 'Ledena kiša', weight: 1.0, freezing: true },
         { pattern: 'Kiša koja se smrzava', weight: 0.6, freezing: true },
         { pattern: 'Poledica moguća', weight: 0.5, freezing: true },
-        { pattern: 'Sitna kiša i {cold_adj:nom:n}', weight: 0.5, tempRange: [-5, 10] },
-        { pattern: 'Kapljica po kapljica', weight: 0.3 },
-        { pattern: 'Kišica', weight: 0.6 },
+        // Temperature combos
+        { pattern: 'Sitna kiša i {cold_adj:nom:n}', weight: 0.7, tempRange: [-5, 10] },
+        { pattern: 'Rosulja i {cold_adj:nom:n}', weight: 0.6, tempRange: [-5, 10] },
+        { pattern: '{cold_adj:nom:f} rosulja', weight: 0.5, tempRange: [-5, 8] },
+        // Time of day
+        { pattern: 'Kišovito jutro', weight: 0.6, timeOfDay: 'morning' },
+        { pattern: 'Tmurna kišna večer', weight: 0.5, timeOfDay: 'evening' },
+        { pattern: 'Kišna noć', weight: 0.6, timeOfDay: 'night' },
     ],
 
     rain: [
         { pattern: 'Kiša', weight: 1.0 },
         { pattern: 'Pada kiša', weight: 0.9 },
         { pattern: 'Kišovito', weight: 0.8 },
+        // Light rain
         { pattern: 'Slaba kiša', weight: 0.8, intensity: 'light' },
         { pattern: 'Lagana kiša', weight: 0.7, intensity: 'light' },
+        { pattern: 'Rominja kiša', weight: 0.6, intensity: 'light' },
+        // Moderate rain
         { pattern: 'Umjerena kiša', weight: 0.7, intensity: 'moderate' },
+        // Heavy rain
         { pattern: 'Jaka kiša', weight: 0.9, intensity: 'heavy' },
         { pattern: 'Obilna kiša', weight: 0.8, intensity: 'heavy' },
         { pattern: 'Pljusak', weight: 0.8, intensity: 'heavy' },
-        { pattern: 'Ledena kiša', weight: 1.0, freezing: true },
-        { pattern: 'Poledica', weight: 0.7, freezing: true },
         { pattern: 'Kiša lije', weight: 0.5, intensity: 'heavy' },
         { pattern: 'Kiša pljušti', weight: 0.4, intensity: 'heavy' },
         { pattern: 'Lije kao iz kabla', weight: 0.3, intensity: 'heavy' },
-        { pattern: 'Kiša i {cold_adj:nom:n}', weight: 0.5, tempRange: [-5, 12] },
-        { pattern: '{warm_adj:nom:f} kiša', weight: 0.4, tempRange: [18, 30] },
-        { pattern: 'Kišno jutro', weight: 0.5, timeOfDay: 'morning' },
-        { pattern: 'Kišna večer', weight: 0.5, timeOfDay: 'evening' },
+        // Freezing rain
+        { pattern: 'Ledena kiša', weight: 1.0, freezing: true },
+        { pattern: 'Poledica', weight: 0.7, freezing: true },
+        // Temperature combos
+        { pattern: 'Kiša i {cold_adj:nom:n}', weight: 0.8, tempRange: [-5, 12] },
+        { pattern: '{cold_adj:nom:f} kiša', weight: 0.7, tempRange: [-5, 10] },
+        { pattern: 'Kišovito i {cold_adj:nom:n}', weight: 0.6, tempRange: [-5, 12] },
+        { pattern: '{warm_adj:nom:f} kiša', weight: 0.5, tempRange: [18, 30] },
+        { pattern: 'Kiša i {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
+        // Time of day
+        { pattern: 'Kišno jutro', weight: 0.7, timeOfDay: 'morning' },
+        { pattern: 'Kišna večer', weight: 0.7, timeOfDay: 'evening' },
+        { pattern: 'Kišna noć', weight: 0.7, timeOfDay: 'night' },
+        { pattern: 'Kišovita noć', weight: 0.6, timeOfDay: 'night' },
     ],
 
     snow: [
         { pattern: 'Snijeg', weight: 1.0 },
         { pattern: 'Pada snijeg', weight: 0.9 },
         { pattern: 'Sniježi', weight: 0.8 },
+        // Light snow
         { pattern: 'Slab snijeg', weight: 0.8, intensity: 'light' },
         { pattern: 'Lagani snijeg', weight: 0.7, intensity: 'light' },
+        { pattern: 'Pahulje padaju', weight: 0.5, intensity: 'light' },
+        // Moderate snow
         { pattern: 'Umjeren snijeg', weight: 0.7, intensity: 'moderate' },
+        // Heavy snow
         { pattern: 'Jak snijeg', weight: 0.8, intensity: 'heavy' },
         { pattern: 'Obilan snijeg', weight: 0.7, intensity: 'heavy' },
         { pattern: 'Snježna mećava', weight: 0.5, intensity: 'heavy' },
+        { pattern: 'Bijeli pokrivač', weight: 0.4, intensity: 'heavy' },
+        { pattern: 'Zavijava snijeg', weight: 0.4, intensity: 'heavy' },
+        // Mixed/wet snow
         { pattern: 'Susnježica', weight: 0.8, tempRange: [-2, 3] },
         { pattern: 'Mokri snijeg', weight: 0.7, tempRange: [-1, 2] },
-        { pattern: 'Pahulje padaju', weight: 0.4 },
-        { pattern: 'Bijeli pokrivač', weight: 0.3, intensity: 'heavy' },
-        { pattern: 'Snježno jutro', weight: 0.5, timeOfDay: 'morning' },
-        { pattern: 'Snijeg i mraz', weight: 0.5, tempRange: [-15, -3] },
+        // Temperature combos
+        { pattern: 'Snijeg i mraz', weight: 0.6, tempRange: [-15, -3] },
+        { pattern: 'Snijeg i {cold_adj:nom:n}', weight: 0.6, tempRange: [-15, 0] },
+        { pattern: '{cold_adj:nom:m} snijeg', weight: 0.5, tempRange: [-15, -2] },
+        // Time of day
+        { pattern: 'Snježno jutro', weight: 0.6, timeOfDay: 'morning' },
+        { pattern: 'Snježna večer', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: 'Snježna noć', weight: 0.6, timeOfDay: 'night' },
     ],
 
     thunderstorm: [
