@@ -97,18 +97,31 @@ export function getSourceConfig() {
 const CORS_PROXIES = [
     { name: 'cors.lol', baseUrl: 'https://api.cors.lol/?url=', encode: true },
     { name: 'codetabs', baseUrl: 'https://api.codetabs.com/v1/proxy?quest=', encode: true },
+    { name: 'corsproxy.dev', baseUrl: 'https://corsproxy-8uo5.onrender.com/?url=', encode: true },
 ];
 
-/** Mutable proxy order - successful proxies move to front, failed ones to back */
-let proxyOrder = [...CORS_PROXIES];
+/**
+ * Two-list proxy selection:
+ * - workingProxies: assumed functional, picked randomly for load distribution
+ * - failedProxies: have failed recently, retried oldest-first (FIFO)
+ */
+let workingProxies = [...CORS_PROXIES];
+let failedProxies = [];
 
 /** Timeout per proxy attempt in milliseconds */
 const PROXY_TIMEOUT_MS = 1000;
 
 /**
  * Fetches a URL via CORS proxy with automatic fallback.
- * Tries each proxy in order, falling back on network error, HTTP error, or timeout.
- * Learns from results: successful proxies move to front, failed ones to back.
+ *
+ * Selection strategy:
+ * - If working list is non-empty, pick a random proxy (distributes load)
+ * - Otherwise, pick the oldest failed proxy (gives it time to recover)
+ *
+ * After each attempt:
+ * - Success: proxy returns to working list
+ * - Failure: proxy goes to back of failed list
+ *
  * @param {string} url - The URL to fetch
  * @param {RequestInit} [options] - Optional fetch options (will be merged with abort signal)
  * @returns {Promise<Response>} The response from the first successful proxy
@@ -116,9 +129,22 @@ const PROXY_TIMEOUT_MS = 1000;
  */
 export async function fetchViaProxy(url, options = {}) {
     const errors = [];
-    const currentOrder = [...proxyOrder];  // Snapshot for this request
 
-    for (const proxy of currentOrder) {
+    // Snapshot globals - work on local copies to avoid interference from concurrent requests
+    let localWorking = [...workingProxies];
+    let localFailed = [...failedProxies];
+    const totalProxies = localWorking.length + localFailed.length;
+
+    for (let attempt = 0; attempt < totalProxies; attempt++) {
+        // Pick proxy: random from working, or oldest from failed
+        let proxy;
+        if (localWorking.length > 0) {
+            const idx = Math.floor(Math.random() * localWorking.length);
+            proxy = localWorking.splice(idx, 1)[0];
+        } else {
+            proxy = localFailed.shift();
+        }
+
         const proxyUrl = proxy.baseUrl + (proxy.encode ? encodeURIComponent(url) : url);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
@@ -135,30 +161,23 @@ export async function fetchViaProxy(url, options = {}) {
             }
 
             log(`Proxy ${proxy.name}: success`);
-
-            // Move successful proxy to front if not already there
-            const idx = proxyOrder.indexOf(proxy);
-            if (idx > 0) {
-                proxyOrder.splice(idx, 1);
-                proxyOrder.unshift(proxy);
-            }
-
+            localWorking.push(proxy);
+            // Update globals with our local state (last concurrent request wins)
+            workingProxies = localWorking;
+            failedProxies = localFailed;
             return response;
         } catch (error) {
             clearTimeout(timeoutId);
             const reason = error.name === 'AbortError' ? 'timeout' : error.message;
             warn(`Proxy ${proxy.name}: ${reason}`);
             errors.push(`${proxy.name}: ${reason}`);
-
-            // Move failed proxy to back
-            const idx = proxyOrder.indexOf(proxy);
-            if (idx >= 0 && idx < proxyOrder.length - 1) {
-                proxyOrder.splice(idx, 1);
-                proxyOrder.push(proxy);
-            }
+            localFailed.push(proxy);
         }
     }
 
+    // All failed - still update globals so future requests know the state
+    workingProxies = localWorking;
+    failedProxies = localFailed;
     throw new Error(`All proxies failed: ${errors.join(', ')}`);
 }
 
