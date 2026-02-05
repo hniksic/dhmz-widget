@@ -8,8 +8,7 @@ import {
     DATA_SOURCE, fetchViaProxy, getSourceConfig, cachedStations, setCachedStations,
     fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL
 } from './config.js';
-import { log, warn } from './log.js';
-import { bumpDescriptionGeneration } from './nlg.js';
+import { log, warn, error } from './log.js';
 import './parsers.js';  // Side-effect: registers parsers
 import { Geolocation } from './geo.js';
 import { LocationPicker, SourceSwitcher, hideToast, showToast } from './ui.js';
@@ -128,13 +127,11 @@ window.addEventListener('focus', refreshIfStale);
 // Register service worker
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
-        .catch(err => warn('SW registration failed:', err.message));
+        .catch(err => error('SW registration failed:', err.message));
 }
 
 // Tap on conditions to refresh (always fetches, no throttle)
-// Also bumps description generation to produce variety on each click
 document.getElementById('condition-container').addEventListener('click', () => {
-    bumpDescriptionGeneration();
     fetchWeatherData({ forceRender: true });
 });
 

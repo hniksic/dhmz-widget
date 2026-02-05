@@ -22,16 +22,6 @@ const WIND_CHILL_MAX_ADJUSTMENT = 10;
 const DEFAULT_HUMIDITY = 50;
 
 // =============================================================================
-// GENERATION COUNTER
-// =============================================================================
-
-export let descriptionGeneration = 0;
-
-export function bumpDescriptionGeneration() {
-    descriptionGeneration++;
-}
-
-// =============================================================================
 // EFFECTIVE TEMPERATURE (WIND CHILL)
 // =============================================================================
 
@@ -74,12 +64,9 @@ const NOUNS = {
     toplina: { gender: 'f', nom: 'toplina', gen: 'topline', dat: 'toplini', acc: 'toplinu', voc: 'toplino', loc: 'toplini', ins: 'toplinom' },
     žega: { gender: 'f', nom: 'žega', gen: 'žege', dat: 'žegi', acc: 'žegu', voc: 'žego', loc: 'žegi', ins: 'žegom' },
     sparina: { gender: 'f', nom: 'sparina', gen: 'sparine', dat: 'sparini', acc: 'sparinu', voc: 'sparino', loc: 'sparini', ins: 'sparinom' },
-    noć: { gender: 'f', nom: 'noć', gen: 'noći', dat: 'noći', acc: 'noć', voc: 'noći', loc: 'noći', ins: 'noći' },
-    večer: { gender: 'f', nom: 'večer', gen: 'večeri', dat: 'večeri', acc: 'večer', voc: 'večeri', loc: 'večeri', ins: 'večeri' },
 
     // Weather nouns - neuter
     vrijeme: { gender: 'n', nom: 'vrijeme', gen: 'vremena', dat: 'vremenu', acc: 'vrijeme', voc: 'vrijeme', loc: 'vremenu', ins: 'vremenom' },
-    jutro: { gender: 'n', nom: 'jutro', gen: 'jutra', dat: 'jutru', acc: 'jutro', voc: 'jutro', loc: 'jutru', ins: 'jutrom' },
 };
 
 const ADJECTIVES = {
@@ -113,11 +100,6 @@ const ADJECTIVES = {
         m: { nom: 'prodoran', gen: 'prodornog', dat: 'prodornom', acc: 'prodoran', loc: 'prodornom', ins: 'prodornim' },
         f: { nom: 'prodorna', gen: 'prodorne', dat: 'prodornoj', acc: 'prodornu', loc: 'prodornoj', ins: 'prodornom' },
         n: { nom: 'prodorno', gen: 'prodornog', dat: 'prodornom', acc: 'prodorno', loc: 'prodornom', ins: 'prodornim' },
-    },
-    zimski: {
-        m: { nom: 'zimski', gen: 'zimskog', dat: 'zimskom', acc: 'zimski', loc: 'zimskom', ins: 'zimskim' },
-        f: { nom: 'zimska', gen: 'zimske', dat: 'zimskoj', acc: 'zimsku', loc: 'zimskoj', ins: 'zimskom' },
-        n: { nom: 'zimsko', gen: 'zimskog', dat: 'zimskom', acc: 'zimsko', loc: 'zimskom', ins: 'zimskim' },
     },
 
     // Cool/fresh adjectives

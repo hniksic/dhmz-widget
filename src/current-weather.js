@@ -187,9 +187,3 @@ export async function fetchCurrentWeather(lat, lon) {
     }
 }
 
-/**
- * Clears the weather conditions cache (for testing).
- */
-export function clearWeatherCache() {
-    conditionsCache.clear();
-}

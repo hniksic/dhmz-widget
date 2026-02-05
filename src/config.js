@@ -11,7 +11,7 @@ import { log, warn } from './log.js';
 // =============================================================================
 
 /** LocalStorage key for source preference */
-export const SOURCE_KEY = 'weather-source';
+const SOURCE_KEY = 'weather-source';
 
 /**
  * Get saved source from localStorage, with URL override for backwards compatibility.
