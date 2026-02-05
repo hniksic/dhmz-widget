@@ -19,6 +19,31 @@ import { generateWeatherDescription } from './nlg.js';
 /** Counter to track render operations for race condition prevention */
 let renderGeneration = 0;
 
+/** Name of the currently displayed station, for avoiding redundant renders */
+let currentlyDisplayedStation = null;
+
+/** Key data fields from last render, for detecting unchanged data */
+let lastRenderedData = null;
+
+/** Returns the name of the currently displayed station */
+export function getCurrentlyDisplayedStation() {
+    return currentlyDisplayedStation;
+}
+
+/**
+ * Checks if station data is unchanged from last render.
+ * Compares key fields that would indicate new measurements.
+ */
+function isDataUnchanged(station) {
+    if (!lastRenderedData) return false;
+    return lastRenderedData.name === station.name &&
+           lastRenderedData.temperature === station.temperature &&
+           lastRenderedData.humidity === station.humidity &&
+           lastRenderedData.pressure === station.pressure &&
+           lastRenderedData.windSpeed === station.windSpeed &&
+           lastRenderedData.measurementTime?.getTime() === station.measurementTime?.getTime();
+}
+
 // =============================================================================
 // STATION NAME PARSING
 // =============================================================================
@@ -90,6 +115,17 @@ async function render(station, distance) {
     // All async operations in this function must check `thisRender === renderGeneration`
     // before writing to the DOM to prevent stale updates.
     const thisRender = ++renderGeneration;
+
+    // Track currently displayed station and data to avoid redundant renders
+    currentlyDisplayedStation = station.name;
+    lastRenderedData = {
+        name: station.name,
+        temperature: station.temperature,
+        humidity: station.humidity,
+        pressure: station.pressure,
+        windSpeed: station.windSpeed,
+        measurementTime: station.measurementTime
+    };
 
     hide('error');
     hide('status');
@@ -221,8 +257,9 @@ function renderStatus(message, showCancel = true) {
 /**
  * Renders the currently selected station from cached data.
  * Async to support weather conditions fetching for pljusak.com stations.
+ * @param {boolean} [forceRender=false] - If true, render even if data unchanged (for user-initiated refresh)
  */
-export async function renderSelectedStation() {
+export async function renderSelectedStation(forceRender = false) {
     if (!cachedStations) return;
 
     const stationNames = Object.keys(cachedStations);
@@ -280,6 +317,12 @@ export async function renderSelectedStation() {
     // Save station coords so we can find nearest if this station disappears
     if (result.station.lat != null && result.station.lon != null) {
         setSelectedLocationCoords(result.station.lat, result.station.lon);
+    }
+
+    // Skip render if data is unchanged (unless explicitly forced by user action)
+    if (!forceRender && isDataUnchanged(result.station)) {
+        log('Data unchanged, skipping render');
+        return;
     }
 
     log('Displaying:', result.station.name, result.station.temperature + '°C');

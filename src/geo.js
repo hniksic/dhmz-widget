@@ -6,9 +6,10 @@
  */
 
 import {
-    NEAREST_LOCATION, getSourceConfig, fetchViaProxy, cachedStations, lastRefresh,
+    NEAREST_LOCATION, getSourceConfig, fetchViaProxy, cachedStations,
     hasSelectedLocation, getSelectedLocation, setSelectedLocation
 } from './config.js';
+import { getCurrentlyDisplayedStation } from './render.js';
 import { log, warn } from './log.js';
 
 // =============================================================================
@@ -142,7 +143,11 @@ export const Geolocation = {
                 // Update dropdown and re-render if "Najbliža" is selected
                 if (self.onUpdate) self.onUpdate();
                 if (getSelectedLocation() === NEAREST_LOCATION && self.onRender) {
-                    self.onRender();
+                    // Only re-render if the nearest station is different from what's displayed
+                    const nearest = findNearestStation(cachedStations, self.coords.lat, self.coords.lon);
+                    if (!nearest || nearest.name !== getCurrentlyDisplayedStation()) {
+                        self.onRender();
+                    }
                 }
             },
             (error) => {

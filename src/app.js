@@ -22,11 +22,14 @@ import { StationMap } from './map.js';
 
 /**
  * Fetches weather data from the configured source via CORS proxy and updates the display.
- * @param {boolean} [skipRender=false] - If true, skip rendering after fetch.
+ * @param {Object} [options={}]
+ * @param {boolean} [options.skipRender=false] - If true, skip rendering after fetch.
  *        Used by SourceSwitcher.toggle() which handles rendering itself after
  *        mapping the station to the new source.
+ * @param {boolean} [options.forceRender=false] - If true, render even if data unchanged.
+ *        Used for user-initiated refreshes to regenerate condition descriptions.
  */
-async function fetchWeatherData(skipRender = false) {
+async function fetchWeatherData({ skipRender = false, forceRender = false } = {}) {
     // Prevent concurrent fetches (e.g., click + focus firing together)
     if (fetchInProgress) {
         return;
@@ -58,7 +61,7 @@ async function fetchWeatherData(skipRender = false) {
         LocationPicker.populate(stationNames);
         Geolocation.request();
         if (!skipRender) {
-            renderSelectedStation();
+            renderSelectedStation(forceRender);
         }
 
     } catch (error) {
@@ -89,7 +92,7 @@ LocationPicker.getStationMap = () => StationMap;
 
 // Wire SourceSwitcher callbacks
 // Pass skipRender=true because toggle() handles rendering after mapping the station
-SourceSwitcher.onToggle = () => fetchWeatherData(true);
+SourceSwitcher.onToggle = () => fetchWeatherData({ skipRender: true });
 SourceSwitcher.onRender = renderSelectedStation;
 
 // =============================================================================
@@ -110,7 +113,7 @@ setInterval(fetchWeatherData, REFRESH_INTERVAL);
 // Auto-refresh when returning to the app (mobile PWA)
 // Multiple events for reliability; throttled via lastRefresh set by fetchWeatherData
 function refreshIfStale() {
-    if (Date.now() - lastRefresh > 5000) {
+    if (Date.now() - lastRefresh > 60000) {
         fetchWeatherData();
         return true;
     }
@@ -132,7 +135,7 @@ if ('serviceWorker' in navigator) {
 // Also bumps description generation to produce variety on each click
 document.getElementById('condition-container').addEventListener('click', () => {
     bumpDescriptionGeneration();
-    fetchWeatherData();
+    fetchWeatherData({ forceRender: true });
 });
 
 // Toast dismiss button
