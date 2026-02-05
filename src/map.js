@@ -72,6 +72,9 @@ export const StationMap = {
     pinch: null,
     /** Tracks if a gesture (pinch/pan) occurred during current touch sequence */
     gestureOccurred: false,
+    /** Last station selection the map has "acknowledged" (to detect
+     * dropdown changes since last open) */
+    acknowledgedSelection: null,
 
     // --- State Queries ---
     isZoomed() { return this.zoom.scale > 1; },
@@ -180,6 +183,32 @@ export const StationMap = {
     /** Reset zoom to default (scale 1, no pan) */
     resetZoom() {
         this.zoom = { scale: 1, x: 0, y: 0 };
+    },
+
+    /**
+     * Center and zoom the map on the currently selected station.
+     * Used when the selection changed via dropdown since the map was
+     * last open.
+     */
+    centerOnSelected() {
+        const sel = getSelectedLocation();
+        let coords;
+        if (sel === NEAREST_LOCATION) {
+            coords = Geolocation.coords;
+        } else if (cachedStations?.[sel]) {
+            coords = cachedStations[sel];
+        } else {
+            coords = getSelectedLocationCoords();
+        }
+        if (!coords || !isFinite(coords.lat) || !isFinite(coords.lon)) return;
+
+        const { viewBox } = this.config;
+        this.zoom.scale = 3;
+        const base = this.latLonToBase(coords.lat, coords.lon);
+        // Pan so the station is at the center of the viewport
+        this.zoom.x = base.x - viewBox.width / this.zoom.scale / 2;
+        this.zoom.y = base.y - viewBox.height / this.zoom.scale / 2;
+        this.clampPan();
     },
 
     /**
@@ -550,6 +579,7 @@ export const StationMap = {
     /** Select a station and close the map */
     selectStation(stationName) {
         if (this.isDragging()) return;
+        this.acknowledgedSelection = stationName;
         LocationPicker.select(stationName);
         this.closeModal();
     },
@@ -623,9 +653,18 @@ export const StationMap = {
      */
     openModal(replaceState = false) {
         this.renderStations();
-        // Clamp zoom to current bounds (handles source changes)
-        this.zoom.scale = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, this.zoom.scale));
-        this.clampPan();
+        const currentSelection = getSelectedLocation();
+        if (this.acknowledgedSelection !== null &&
+            currentSelection !== this.acknowledgedSelection) {
+            // Station changed via dropdown since last open — center on it
+            this.centerOnSelected();
+        } else {
+            // Preserve existing zoom/pan, just clamp to current bounds
+            this.zoom.scale = Math.max(this.config.minZoom,
+                Math.min(this.config.maxZoom, this.zoom.scale));
+            this.clampPan();
+        }
+        this.acknowledgedSelection = currentSelection;
         this.updatePositions();
         document.getElementById('map-modal').hidden = false;
         // Push/replace state so Android back button closes modal instead of exiting app
@@ -921,6 +960,7 @@ export const StationMap = {
     },
 
     init() {
+        this.acknowledgedSelection = getSelectedLocation();
         const svg = this.createSvg(outlinePaths);
         const modal = document.getElementById('map-modal');
         const closeBtn = document.getElementById('map-close');
@@ -958,9 +998,14 @@ export const StationMap = {
                 await SourceSwitcher.toggle();
                 self.renderStations();
                 // Clamp zoom to new source bounds
-                self.zoom.scale = Math.max(self.config.minZoom, Math.min(self.config.maxZoom, self.zoom.scale));
+                self.zoom.scale = Math.max(self.config.minZoom,
+                    Math.min(self.config.maxZoom, self.zoom.scale));
                 self.clampPan();
                 self.updatePositions();
+                // Acknowledge the (possibly changed) selection so
+                // in-map source switches don't trigger re-centering
+                // on next open.
+                self.acknowledgedSelection = getSelectedLocation();
             });
         }
 
