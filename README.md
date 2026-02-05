@@ -1,23 +1,28 @@
 # DHMZ Weather Widget
 
-A simple PWA that displays current measured weather daqta from DHMZ (Croatian
-Meteorological Service).
+A PWA that displays current measured weather data from Croatian weather stations.
 
 **Live app: https://hniksic.github.io/dhmz-widget/index.html**
 
 ## Features
 
-- Real-time temperature from any DHMZ weather station in Croatia
+- Current temperature, humidity, pressure, and wind from weather stations
+- Two switchable data sources (toggle in the top-left corner):
+  - **DHMZ** — official Croatian Meteorological Service stations
+  - **pljusak.com** — amateur weather station network covering Croatia, Slovenia,
+    Bosnia, and surrounding regions
 - Auto-selects nearest station using GPS
-- Manual station selection from dropdown
-- Displays actual measured values (not forecasts)
+- Manual station selection from dropdown or interactive map
+- Displays actual measured values, not forecasts
 - Installable as a PWA on mobile devices
-- Works offline after first load
 
-## Data Source
+## Data Sources
 
-Weather data is fetched from [DHMZ](https://meteo.hr/) via their public XML endpoint at
-vrijeme.hr.
+**DHMZ** data is fetched from [DHMZ](https://meteo.hr/) via their public XML endpoint
+at vrijeme.hr. It updates hourly.
+
+**pljusak.com** data is fetched from [pljusak.com](https://pljusak.com/), a community
+network of amateur weather stations. It updates every 5–15 minutes.
 
 ## Installation
 
