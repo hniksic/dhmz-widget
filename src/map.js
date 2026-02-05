@@ -921,12 +921,6 @@ export const StationMap = {
     },
 
     init() {
-        // Inject globe icon into map trigger button
-        const mapTrigger = document.getElementById('map-trigger');
-        mapTrigger.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="3.5" ry="9"/>
-            <path d="M3 12h18"/><path d="M4.5 7h15M4.5 17h15"/></svg>`;
-
         const svg = this.createSvg(outlinePaths);
         const modal = document.getElementById('map-modal');
         const closeBtn = document.getElementById('map-close');

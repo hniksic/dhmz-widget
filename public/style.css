@@ -526,7 +526,7 @@ body {
     top: 20px;
     right: 20px;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
 }
 
@@ -543,6 +543,11 @@ body {
     user-select: none;
 }
 
+.map-trigger svg,
+.location-trigger svg {
+    display: block;
+}
+
 .map-trigger:hover {
     color: var(--text-secondary);
 }
@@ -557,11 +562,12 @@ body {
     background: none;
     border: none;
     color: var(--text-muted);
-    font-size: 1.25rem;
     cursor: pointer;
     padding: 0;
     -webkit-tap-highlight-color: transparent;
     line-height: 1;
+    display: flex;
+    align-items: center;
     user-select: none;
 }
 
@@ -596,13 +602,10 @@ body {
 
 /* On touch devices, larger icons and dropdown opens to the left */
 @media (pointer: coarse) {
-    .map-trigger svg {
+    .map-trigger svg,
+    .location-trigger svg {
         width: 20px;
         height: 20px;
-    }
-
-    .location-trigger {
-        font-size: 1.5rem;
     }
 
     .location-dropdown {
