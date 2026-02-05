@@ -137,6 +137,8 @@ body {
     box-shadow: 0 8px 32px var(--shadow-color);
     border: 1px solid var(--border-color);
     transition: opacity 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .widget.refreshing {
