@@ -6,7 +6,8 @@
 
 import {
     DATA_SOURCE, fetchViaProxy, getSourceConfig, cachedStations, setCachedStations,
-    fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL
+    fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL,
+    NEAREST_LOCATION, getSelectedLocation
 } from './config.js';
 import { log, warn, error } from './log.js';
 import './parsers.js';  // Side-effect: registers parsers
@@ -42,6 +43,14 @@ async function fetchWeatherData({ skipRender = false, forceRender = false } = {}
     widget.classList.add('refreshing');
     log(`Fetching from ${DATA_SOURCE}...`);
 
+    // When tracking nearest station and we'll render, start geolocation
+    // early so it runs in parallel with the network fetch. This avoids a
+    // double-render flash where old coords render first.
+    const needsGeo = !skipRender && getSelectedLocation() === NEAREST_LOCATION;
+    const geoPromise = needsGeo
+        ? Geolocation.request({ suppressRender: true })
+        : null;
+
     try {
         const response = await fetchViaProxy(getSourceConfig().url + cacheBuster);
 
@@ -58,7 +67,14 @@ async function fetchWeatherData({ skipRender = false, forceRender = false } = {}
         hideToast();
 
         LocationPicker.populate(stationNames);
-        Geolocation.request();
+        if (geoPromise) {
+            // Wait for geolocation to complete before rendering so we
+            // render with up-to-date coords (geo promise never rejects)
+            await geoPromise;
+        } else {
+            // Fire-and-forget for non-nearest or skipRender cases
+            Geolocation.request();
+        }
         if (!skipRender) {
             renderSelectedStation(forceRender);
         }

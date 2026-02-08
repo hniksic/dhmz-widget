@@ -117,52 +117,64 @@ export const Geolocation = {
     /**
      * Request user's geolocation and cache coordinates.
      * On first visit, auto-selects "Najbliža" location.
+     *
+     * @param {Object} [options={}]
+     * @param {boolean} [options.suppressRender=false] - If true, skip
+     *     onRender calls (caller will handle rendering after awaiting
+     *     the returned promise).
+     * @returns {Promise<void>} Resolves when geolocation completes
+     *     (both success and error resolve, never rejects).
      */
-    request() {
+    request({ suppressRender = false } = {}) {
         if (!('geolocation' in navigator)) {
             this.status = 'unavailable';
             if (this.onUpdate) this.onUpdate();
-            return;
+            return Promise.resolve();
         }
 
         const self = this;
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                self.status = 'granted';
-                self.coords = {
-                    lat: position.coords.latitude,
-                    lon: position.coords.longitude
-                };
-                log('User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
+        return new Promise((resolve) => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    self.status = 'granted';
+                    self.coords = {
+                        lat: position.coords.latitude,
+                        lon: position.coords.longitude
+                    };
+                    log('User location:', self.coords.lat.toFixed(4), self.coords.lon.toFixed(4));
 
-                // On first visit, auto-select "Najbliža"
-                if (!hasSelectedLocation()) {
-                    setSelectedLocation(NEAREST_LOCATION);
-                }
+                    // On first visit, auto-select "Najbliža"
+                    if (!hasSelectedLocation()) {
+                        setSelectedLocation(NEAREST_LOCATION);
+                    }
 
-                // Update dropdown and re-render if "Najbliža" is selected
-                if (self.onUpdate) self.onUpdate();
-                if (getSelectedLocation() === NEAREST_LOCATION && self.onRender) {
-                    // Only re-render if the nearest station is different from what's displayed
-                    const nearest = findNearestStation(cachedStations, self.coords.lat, self.coords.lon);
-                    if (!nearest || nearest.name !== getCurrentlyDisplayedStation()) {
+                    // Update dropdown and re-render if "Najbliža" is selected
+                    if (self.onUpdate) self.onUpdate();
+                    if (!suppressRender && getSelectedLocation() === NEAREST_LOCATION && self.onRender) {
+                        // Only re-render if the nearest station is different from what's displayed
+                        const nearest = findNearestStation(cachedStations, self.coords.lat, self.coords.lon);
+                        if (!nearest || nearest.name !== getCurrentlyDisplayedStation()) {
+                            self.onRender();
+                        }
+                    }
+                    resolve();
+                },
+                (error) => {
+                    // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
+                    self.status = error.code === 1 ? 'denied' : 'unavailable';
+                    if (self.onUpdate) self.onUpdate();
+
+                    // If "Najbliža" is currently selected and we can't get location,
+                    // render error (unless user cancelled and is manually selecting
+                    // a station)
+                    if (!suppressRender && getSelectedLocation() === NEAREST_LOCATION && !self.cancelledByUser && self.onRender) {
                         self.onRender();
                     }
-                }
-            },
-            (error) => {
-                // error.code: 1=PERMISSION_DENIED, 2=POSITION_UNAVAILABLE, 3=TIMEOUT
-                self.status = error.code === 1 ? 'denied' : 'unavailable';
-                if (self.onUpdate) self.onUpdate();
-
-                // If "Najbliža" is currently selected and we can't get location, render error
-                // (unless user cancelled and is manually selecting a station)
-                if (getSelectedLocation() === NEAREST_LOCATION && !self.cancelledByUser && self.onRender) {
-                    self.onRender();
-                }
-            },
-            { timeout: 10000, maximumAge: 300000 }
-        );
+                    resolve();
+                },
+                { timeout: 10000, maximumAge: 300000 }
+            );
+        });
     },
 
     /**
