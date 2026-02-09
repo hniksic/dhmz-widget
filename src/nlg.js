@@ -322,7 +322,7 @@ const TEMPLATES = [
     { pattern: 'Hladno', tempRange: [-5, 5], weight: 1.0 },
     { pattern: 'Studeno', tempRange: [-5, 3], weight: 0.8 },
     { pattern: '{cold_adj:nom:m} {weather_noun:nom}', tempRange: [-5, 5], weight: 0.7 },
-    { pattern: 'Zimski dan', tempRange: [-5, 5], weight: 0.8 },
+    { pattern: 'Zimski dan', tempRange: [-5, 5], weight: 0.8, timeOfDay: ['morning', 'afternoon'] },
     { pattern: 'Zima je tu', tempRange: [-5, 3], weight: 0.6 },
     { pattern: 'Vrijeme za kaput', tempRange: [-3, 6], weight: 0.6 },
     { pattern: '{cold_adj:nom:n} je vani', tempRange: [-5, 5], weight: 0.7 },
@@ -377,7 +377,7 @@ const TEMPLATES = [
     { pattern: 'Jako vruće', tempRange: [32, 40], weight: 0.8 },
     { pattern: 'Vrućina', tempRange: [30, 38], weight: 0.9 },
     { pattern: 'Za kupanje', tempRange: [28, 36], weight: 0.5 },
-    { pattern: 'Dan za sladoled', tempRange: [28, 35], weight: 0.4 },
+    { pattern: 'Dan za sladoled', tempRange: [28, 35], weight: 0.4, timeOfDay: ['morning', 'afternoon'] },
     { pattern: 'More zove', tempRange: [28, 36], weight: 0.4 },
     { pattern: '{hot_adj:nom:f} {hot_noun:nom}', tempRange: [30, 38], weight: 0.7 },
     { pattern: '{hot_adj:nom:n} je', tempRange: [30, 38], weight: 0.7 },
@@ -445,48 +445,55 @@ const TEMPLATES = [
 const WEATHER_TEMPLATES = {
     clear: [
         { pattern: 'Vedro', weight: 1.0 },
-        { pattern: 'Sunčano', weight: 1.0 },
-        { pattern: 'Pretežno sunčano', weight: 0.8 },
+        { pattern: 'Sunčano', weight: 1.0, timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Pretežno sunčano', weight: 0.8, timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Vedro nebo', weight: 0.7 },
-        { pattern: '{clear_adj:nom:n} vrijeme', weight: 0.7 },
-        { pattern: 'Sunce sja', weight: 0.5 },
+        { pattern: '{clear_adj:nom:n} vrijeme', weight: 0.7, timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Sunce sja', weight: 0.5, timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Nebo bez oblačka', weight: 0.4 },
         // Temperature combos
         { pattern: 'Vedro i {cold_adj:nom:n}', weight: 0.6, tempRange: [-20, 5] },
-        { pattern: 'Sunčano, ali {cold_adj:nom:n}', weight: 0.5, tempRange: [-10, 8] },
+        { pattern: 'Sunčano, ali {cold_adj:nom:n}', weight: 0.5, tempRange: [-10, 8], timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Vedro i {cool_adj:nom:n}', weight: 0.6, tempRange: [5, 15] },
-        { pattern: 'Sunčano i {mild_adj:nom:n}', weight: 0.6, tempRange: [12, 20] },
+        { pattern: 'Sunčano i {mild_adj:nom:n}', weight: 0.6, tempRange: [12, 20], timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Vedro i {warm_adj:nom:n}', weight: 0.6, tempRange: [20, 30] },
-        { pattern: 'Sunce grije', weight: 0.5, tempRange: [18, 35] },
-        { pattern: 'Sunčano i {hot_adj:nom:n}', weight: 0.6, tempRange: [28, 45] },
-        { pattern: 'Sunce prži', weight: 0.4, tempRange: [32, 50] },
+        { pattern: 'Sunce grije', weight: 0.5, tempRange: [18, 35], timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Sunčano i {hot_adj:nom:n}', weight: 0.6, tempRange: [28, 45], timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Sunce prži', weight: 0.4, tempRange: [32, 50], timeOfDay: ['morning', 'afternoon'] },
         // Time of day
         { pattern: 'Sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
         { pattern: '{clear_adj:nom:n} jutro', weight: 0.5, timeOfDay: 'morning' },
         { pattern: '{clear_adj:nom:m} dan', weight: 0.6, timeOfDay: 'afternoon' },
         { pattern: 'Vedra večer', weight: 0.6, timeOfDay: 'evening' },
         { pattern: 'Sunčana večer', weight: 0.5, timeOfDay: 'evening' },
+        { pattern: 'Tiha vedra večer', weight: 0.4, timeOfDay: 'evening' },
         { pattern: 'Vedra noć', weight: 0.6, timeOfDay: 'night' },
         { pattern: 'Zvjezdana noć', weight: 0.4, timeOfDay: 'night' },
+        { pattern: 'Bistra noć', weight: 0.5, timeOfDay: 'night' },
+        { pattern: 'Nebo puno zvijezda', weight: 0.3, timeOfDay: 'night' },
     ],
 
     partly_cloudy: [
-        { pattern: 'Djelomice sunčano', weight: 1.0 },
+        { pattern: 'Djelomice sunčano', weight: 1.0, timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Promjenljivo oblačno', weight: 1.0 },
         { pattern: 'Umjereno oblačno', weight: 0.8 },
-        { pattern: 'Sunčano uz umjerenu naoblaku', weight: 0.7 },
-        { pattern: 'Oblaci i sunce', weight: 0.6 },
-        { pattern: 'Povremeno sunce', weight: 0.5 },
+        { pattern: 'Sunčano uz umjerenu naoblaku', weight: 0.7, timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Oblaci i sunce', weight: 0.6, timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Povremeno sunce', weight: 0.5, timeOfDay: ['morning', 'afternoon'] },
+        { pattern: 'Povremeno vedro', weight: 0.5 },
+        { pattern: 'Oblaci prolaze', weight: 0.4 },
         // Temperature combos
-        { pattern: 'Djelomice sunčano i {warm_adj:nom:n}', weight: 0.6, tempRange: [20, 30] },
+        { pattern: 'Djelomice sunčano i {warm_adj:nom:n}', weight: 0.6, tempRange: [20, 30], timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Promjenljivo oblačno i {cold_adj:nom:n}', weight: 0.6, tempRange: [-10, 10] },
-        { pattern: 'Djelomice sunčano i {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
+        { pattern: 'Djelomice sunčano i {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20], timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Promjenljivo oblačno, {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
         // Time of day
         { pattern: 'Djelomice sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
         { pattern: 'Promjenljivo oblačno popodne', weight: 0.5, timeOfDay: 'afternoon' },
         { pattern: 'Djelomice vedra večer', weight: 0.6, timeOfDay: 'evening' },
+        { pattern: 'Promjenljivo oblačna večer', weight: 0.5, timeOfDay: 'evening' },
         { pattern: 'Promjenljivo oblačna noć', weight: 0.5, timeOfDay: 'night' },
+        { pattern: 'Djelomice vedra noć', weight: 0.5, timeOfDay: 'night' },
     ],
 
     cloudy: [
@@ -769,7 +776,10 @@ function selectWeatherCodeTemplate(weather, effTemp, timeOfDay, context) {
         // Temperature range
         if (t.tempRange && (effTemp < t.tempRange[0] || effTemp > t.tempRange[1])) return false;
         // Time of day
-        if (t.timeOfDay !== undefined && t.timeOfDay !== timeOfDay) return false;
+        if (t.timeOfDay !== undefined) {
+            const allowed = Array.isArray(t.timeOfDay) ? t.timeOfDay : [t.timeOfDay];
+            if (!allowed.includes(timeOfDay)) return false;
+        }
         // Humidity constraints
         if (t.minHumidity !== undefined && (context.humidity ?? DEFAULT_HUMIDITY) < t.minHumidity) return false;
         if (t.maxHumidity !== undefined && (context.humidity ?? DEFAULT_HUMIDITY) > t.maxHumidity) return false;
@@ -799,7 +809,10 @@ function selectTemperatureTemplate(effTemp, windSpeed, humidity, timeOfDay, cont
             if ((humidity ?? DEFAULT_HUMIDITY) < t.minHumidity) return false;
         }
         if (t.maxHumidity !== undefined && (humidity ?? DEFAULT_HUMIDITY) > t.maxHumidity) return false;
-        if (t.timeOfDay !== undefined && t.timeOfDay !== timeOfDay) return false;
+        if (t.timeOfDay !== undefined) {
+            const allowed = Array.isArray(t.timeOfDay) ? t.timeOfDay : [t.timeOfDay];
+            if (!allowed.includes(timeOfDay)) return false;
+        }
         return true;
     });
 
