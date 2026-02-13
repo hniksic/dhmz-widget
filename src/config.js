@@ -124,10 +124,13 @@ const PROXY_TIMEOUT_MS = 1000;
  *
  * @param {string} url - The URL to fetch
  * @param {RequestInit} [options] - Optional fetch options (will be merged with abort signal)
+ * @param {((response: Response) => Promise<void>)|null} [validate] - Optional async
+ *        validator called with a cloned response. If it throws, the proxy is
+ *        treated as failed and the next one is tried.
  * @returns {Promise<Response>} The response from the first successful proxy
  * @throws {Error} If all proxies fail
  */
-export async function fetchViaProxy(url, options = {}) {
+export async function fetchViaProxy(url, options = {}, validate = null) {
     const errors = [];
 
     // Snapshot globals - work on local copies to avoid interference from concurrent requests
@@ -158,6 +161,10 @@ export async function fetchViaProxy(url, options = {}) {
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
+            }
+
+            if (validate) {
+                await validate(response.clone());
             }
 
             log(`Proxy ${proxy.name}: success`);

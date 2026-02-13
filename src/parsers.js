@@ -83,6 +83,17 @@ function parseNumberOrNull(value) {
  */
 export const DhmzParser = {
     /**
+     * Validates that a proxy response looks like DHMZ XML.
+     * @param {Response} response
+     */
+    async validate(response) {
+        const text = await response.text();
+        if (!text.startsWith('<?xml')) {
+            throw new Error('not XML');
+        }
+    },
+
+    /**
      * Parses DHMZ XML response and returns station data.
      * @param {string} xmlText - Raw XML response
      * @returns {Object<string, StationData>}
@@ -222,6 +233,17 @@ export const DhmzParser = {
  * PljusakParser - Parses weather data from pljusak.com JavaScript array format.
  */
 export const PljusakParser = {
+    /**
+     * Validates that a proxy response looks like pljusak.com data.
+     * @param {Response} response
+     */
+    async validate(response) {
+        const text = await response.text();
+        if (!text.includes('var podaci')) {
+            throw new Error('missing podaci data');
+        }
+    },
+
     /** Data array indices */
     INDICES: {
         TYPE: 0,

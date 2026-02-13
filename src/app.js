@@ -52,7 +52,8 @@ async function fetchWeatherData({ skipRender = false, forceRender = false } = {}
         : null;
 
     try {
-        const response = await fetchViaProxy(getSourceConfig().url + cacheBuster);
+        const validate = getSourceConfig().parser.validate;
+        const response = await fetchViaProxy(getSourceConfig().url + cacheBuster, {}, validate);
 
         const responseText = await response.text();
 
