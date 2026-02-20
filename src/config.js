@@ -95,6 +95,7 @@ export function getSourceConfig() {
  * Each proxy has a name for logging, a baseUrl, and whether to encodeURIComponent the URL.
  */
 const CORS_PROXIES = [
+    { name: 'morestina', baseUrl: 'https://morestina.net:8080/', encode: false, preferred: true },
     { name: 'cors.lol', baseUrl: 'https://api.cors.lol/?url=', encode: true },
     { name: 'codetabs', baseUrl: 'https://api.codetabs.com/v1/proxy?quest=', encode: true },
     { name: 'corsproxy.dev', baseUrl: 'https://corsproxy-8uo5.onrender.com/?url=', encode: true },
@@ -139,9 +140,13 @@ export async function fetchViaProxy(url, options = {}, validate = null) {
     const totalProxies = localWorking.length + localFailed.length;
 
     for (let attempt = 0; attempt < totalProxies; attempt++) {
-        // Pick proxy: random from working, or oldest from failed
+        // Pick proxy: preferred from working, then random from working,
+        // then oldest from failed
         let proxy;
-        if (localWorking.length > 0) {
+        const prefIdx = localWorking.findIndex(p => p.preferred);
+        if (prefIdx !== -1) {
+            proxy = localWorking.splice(prefIdx, 1)[0];
+        } else if (localWorking.length > 0) {
             const idx = Math.floor(Math.random() * localWorking.length);
             proxy = localWorking.splice(idx, 1)[0];
         } else {
