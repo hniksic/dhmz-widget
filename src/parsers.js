@@ -258,7 +258,11 @@ export const PljusakParser = {
         HUMIDITY: 16,
         WIND_DIR: 17,
         WIND_SPEED: 18,
-        DEWPOINT: 24
+        // Pljusak does not reliably expose dewpoint. Column 24 looks like a
+        // candidate but tracks air temperature within ~1 °C regardless of
+        // humidity (mean 9.5 °C deviation from Magnus across 596 stations);
+        // no other column is consistent across networks. If dewpoint is ever
+        // needed, source it from Open-Meteo.
     },
 
     /** Maximum age for readings - older stations are filtered out (12 hours) */
@@ -348,7 +352,6 @@ export const PljusakParser = {
 
             const humidity = parseNumberOrNull(entry[I.HUMIDITY]);
             const windSpeed = parseNumberOrNull(entry[I.WIND_SPEED]);
-            const dewpoint = parseNumberOrNull(entry[I.DEWPOINT]);
 
             result[name] = {
                 name,
@@ -360,7 +363,7 @@ export const PljusakParser = {
                 pressureTrend: parseNumberOrNull(entry[I.PRESSURE_TREND]),
                 windDirection: entry[I.WIND_DIR] || null,
                 windSpeed,
-                condition: this.generateDescription(temperature, humidity, windSpeed, dewpoint),
+                condition: this.generateDescription(temperature, humidity, windSpeed, null),
                 measurementTime
             };
         }

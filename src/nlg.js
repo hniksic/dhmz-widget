@@ -4,7 +4,10 @@
  * Generates varied weather descriptions using:
  * - Template patterns with typed slots
  * - Synonym pools with weighted selection
- * - Croatian morphological declension (7 cases, 3 genders)
+ * - Croatian morphological declension: nominative, genitive, instrumental
+ *   across 3 genders. Other cases (dat/acc/voc/loc) are not currently
+ *   exercised by any template; if a future template needs one, add the
+ *   relevant column to the affected lexicon entries.
  * - Weather condition awareness for contextual descriptions
  */
 
@@ -51,175 +54,70 @@ function getTimeOfDay() {
 
 const NOUNS = {
     // Weather nouns - masculine
-    vjetar: { gender: 'm', nom: 'vjetar', gen: 'vjetra', dat: 'vjetru', acc: 'vjetar', voc: 'vjetre', loc: 'vjetru', ins: 'vjetrom' },
-    povjetarac: { gender: 'm', nom: 'povjetarac', gen: 'povjetarca', dat: 'povjetarcu', acc: 'povjetarac', voc: 'povjetarče', loc: 'povjetarcu', ins: 'povjetarcem' },
-    mraz: { gender: 'm', nom: 'mraz', gen: 'mraza', dat: 'mrazu', acc: 'mraz', voc: 'mraze', loc: 'mrazu', ins: 'mrazom' },
-    dan: { gender: 'm', nom: 'dan', gen: 'dana', dat: 'danu', acc: 'dan', voc: 'dane', loc: 'danu', ins: 'danom' },
+    vjetar: { gender: 'm', nom: 'vjetar', gen: 'vjetra', ins: 'vjetrom' },
+    povjetarac: { gender: 'm', nom: 'povjetarac', gen: 'povjetarca', ins: 'povjetarcem' },
+    mraz: { gender: 'm', nom: 'mraz', gen: 'mraza', ins: 'mrazom' },
+    dan: { gender: 'm', nom: 'dan', gen: 'dana', ins: 'danom' },
+    // udari = "gusts", lexicalized plural; only plural forms are used.
+    udari: { gender: 'm', nom: 'udari', gen: 'udara', ins: 'udarima' },
 
     // Weather nouns - feminine
-    hladnoća: { gender: 'f', nom: 'hladnoća', gen: 'hladnoće', dat: 'hladnoći', acc: 'hladnoću', voc: 'hladnoćo', loc: 'hladnoći', ins: 'hladnoćom' },
-    studen: { gender: 'f', nom: 'studen', gen: 'studeni', dat: 'studeni', acc: 'studen', voc: 'studeni', loc: 'studeni', ins: 'studeni' },
-    zima: { gender: 'f', nom: 'zima', gen: 'zime', dat: 'zimi', acc: 'zimu', voc: 'zimo', loc: 'zimi', ins: 'zimom' },
-    vrućina: { gender: 'f', nom: 'vrućina', gen: 'vrućine', dat: 'vrućini', acc: 'vrućinu', voc: 'vrućino', loc: 'vrućini', ins: 'vrućinom' },
-    toplina: { gender: 'f', nom: 'toplina', gen: 'topline', dat: 'toplini', acc: 'toplinu', voc: 'toplino', loc: 'toplini', ins: 'toplinom' },
-    žega: { gender: 'f', nom: 'žega', gen: 'žege', dat: 'žegi', acc: 'žegu', voc: 'žego', loc: 'žegi', ins: 'žegom' },
-    sparina: { gender: 'f', nom: 'sparina', gen: 'sparine', dat: 'sparini', acc: 'sparinu', voc: 'sparino', loc: 'sparini', ins: 'sparinom' },
+    hladnoća: { gender: 'f', nom: 'hladnoća', gen: 'hladnoće', ins: 'hladnoćom' },
+    studen: { gender: 'f', nom: 'studen', gen: 'studeni', ins: 'studeni' },
+    zima: { gender: 'f', nom: 'zima', gen: 'zime', ins: 'zimom' },
+    vrućina: { gender: 'f', nom: 'vrućina', gen: 'vrućine', ins: 'vrućinom' },
+    toplina: { gender: 'f', nom: 'toplina', gen: 'topline', ins: 'toplinom' },
+    žega: { gender: 'f', nom: 'žega', gen: 'žege', ins: 'žegom' },
+    sparina: { gender: 'f', nom: 'sparina', gen: 'sparine', ins: 'sparinom' },
+    grmljavina: { gender: 'f', nom: 'grmljavina', gen: 'grmljavine', ins: 'grmljavinom' },
 
     // Weather nouns - neuter
-    vrijeme: { gender: 'n', nom: 'vrijeme', gen: 'vremena', dat: 'vremenu', acc: 'vrijeme', voc: 'vrijeme', loc: 'vremenu', ins: 'vremenom' },
+    vrijeme: { gender: 'n', nom: 'vrijeme', gen: 'vremena', ins: 'vremenom' },
 };
 
 const ADJECTIVES = {
     // Cold adjectives
-    hladan: {
-        m: { nom: 'hladan', gen: 'hladnog', dat: 'hladnom', acc: 'hladan', loc: 'hladnom', ins: 'hladnim' },
-        f: { nom: 'hladna', gen: 'hladne', dat: 'hladnoj', acc: 'hladnu', loc: 'hladnoj', ins: 'hladnom' },
-        n: { nom: 'hladno', gen: 'hladnog', dat: 'hladnom', acc: 'hladno', loc: 'hladnom', ins: 'hladnim' },
-    },
-    studen: {
-        m: { nom: 'studen', gen: 'studenog', dat: 'studenom', acc: 'studen', loc: 'studenom', ins: 'studenim' },
-        f: { nom: 'studena', gen: 'studene', dat: 'studenoj', acc: 'studenu', loc: 'studenoj', ins: 'studenom' },
-        n: { nom: 'studeno', gen: 'studenog', dat: 'studenom', acc: 'studeno', loc: 'studenom', ins: 'studenim' },
-    },
-    leden: {
-        m: { nom: 'leden', gen: 'ledenog', dat: 'ledenom', acc: 'leden', loc: 'ledenom', ins: 'ledenim' },
-        f: { nom: 'ledena', gen: 'ledene', dat: 'ledenoj', acc: 'ledenu', loc: 'ledenoj', ins: 'ledenom' },
-        n: { nom: 'ledeno', gen: 'ledenog', dat: 'ledenom', acc: 'ledeno', loc: 'ledenom', ins: 'ledenim' },
-    },
-    prohladan: {
-        m: { nom: 'prohladan', gen: 'prohladnog', dat: 'prohladnom', acc: 'prohladan', loc: 'prohladnom', ins: 'prohladnim' },
-        f: { nom: 'prohladna', gen: 'prohladne', dat: 'prohladnoj', acc: 'prohladnu', loc: 'prohladnoj', ins: 'prohladnom' },
-        n: { nom: 'prohladno', gen: 'prohladnog', dat: 'prohladnom', acc: 'prohladno', loc: 'prohladnom', ins: 'prohladnim' },
-    },
-    oštar: {
-        m: { nom: 'oštar', gen: 'oštrog', dat: 'oštrom', acc: 'oštar', loc: 'oštrom', ins: 'oštrim' },
-        f: { nom: 'oštra', gen: 'oštre', dat: 'oštroj', acc: 'oštru', loc: 'oštroj', ins: 'oštrom' },
-        n: { nom: 'oštro', gen: 'oštrog', dat: 'oštrom', acc: 'oštro', loc: 'oštrom', ins: 'oštrim' },
-    },
-    prodoran: {
-        m: { nom: 'prodoran', gen: 'prodornog', dat: 'prodornom', acc: 'prodoran', loc: 'prodornom', ins: 'prodornim' },
-        f: { nom: 'prodorna', gen: 'prodorne', dat: 'prodornoj', acc: 'prodornu', loc: 'prodornoj', ins: 'prodornom' },
-        n: { nom: 'prodorno', gen: 'prodornog', dat: 'prodornom', acc: 'prodorno', loc: 'prodornom', ins: 'prodornim' },
-    },
+    hladan:    { m: { nom: 'hladan'    }, f: { nom: 'hladna'    }, n: { nom: 'hladno'    } },
+    studen:    { m: { nom: 'studen'    }, f: { nom: 'studena'   }, n: { nom: 'studeno'   } },
+    leden:     { m: { nom: 'leden'     }, f: { nom: 'ledena'    }, n: { nom: 'ledeno'    } },
+    prohladan: { m: { nom: 'prohladan' }, f: { nom: 'prohladna' }, n: { nom: 'prohladno' } },
+    oštar:     { m: { nom: 'oštar'     }, f: { nom: 'oštra'     }, n: { nom: 'oštro'     } },
+    prodoran:  { m: { nom: 'prodoran'  }, f: { nom: 'prodorna'  }, n: { nom: 'prodorno'  } },
 
     // Cool/fresh adjectives
-    svjež: {
-        m: { nom: 'svjež', gen: 'svježeg', dat: 'svježem', acc: 'svjež', loc: 'svježem', ins: 'svježim' },
-        f: { nom: 'svježa', gen: 'svježe', dat: 'svježoj', acc: 'svježu', loc: 'svježoj', ins: 'svježom' },
-        n: { nom: 'svježe', gen: 'svježeg', dat: 'svježem', acc: 'svježe', loc: 'svježem', ins: 'svježim' },
-    },
-    osvježavajuć: {
-        m: { nom: 'osvježavajuć', gen: 'osvježavajućeg', dat: 'osvježavajućem', acc: 'osvježavajuć', loc: 'osvježavajućem', ins: 'osvježavajućim' },
-        f: { nom: 'osvježavajuća', gen: 'osvježavajuće', dat: 'osvježavajućoj', acc: 'osvježavajuću', loc: 'osvježavajućoj', ins: 'osvježavajućom' },
-        n: { nom: 'osvježavajuće', gen: 'osvježavajućeg', dat: 'osvježavajućem', acc: 'osvježavajuće', loc: 'osvježavajućem', ins: 'osvježavajućim' },
-    },
+    svjež:          { m: { nom: 'svjež'          }, f: { nom: 'svježa'          }, n: { nom: 'svježe'          } },
+    osvježavajuć:   { m: { nom: 'osvježavajuć'   }, f: { nom: 'osvježavajuća'   }, n: { nom: 'osvježavajuće'   } },
 
     // Mild adjectives
-    blag: {
-        m: { nom: 'blag', gen: 'blagog', dat: 'blagom', acc: 'blag', loc: 'blagom', ins: 'blagim' },
-        f: { nom: 'blaga', gen: 'blage', dat: 'blagoj', acc: 'blagu', loc: 'blagoj', ins: 'blagom' },
-        n: { nom: 'blago', gen: 'blagog', dat: 'blagom', acc: 'blago', loc: 'blagom', ins: 'blagim' },
-    },
-    umjeren: {
-        m: { nom: 'umjeren', gen: 'umjerenog', dat: 'umjerenom', acc: 'umjeren', loc: 'umjerenom', ins: 'umjerenim' },
-        f: { nom: 'umjerena', gen: 'umjerene', dat: 'umjerenoj', acc: 'umjerenu', loc: 'umjerenoj', ins: 'umjerenom' },
-        n: { nom: 'umjereno', gen: 'umjerenog', dat: 'umjerenom', acc: 'umjereno', loc: 'umjerenom', ins: 'umjerenim' },
-    },
-    ugodan: {
-        m: { nom: 'ugodan', gen: 'ugodnog', dat: 'ugodnom', acc: 'ugodan', loc: 'ugodnom', ins: 'ugodnim' },
-        f: { nom: 'ugodna', gen: 'ugodne', dat: 'ugodnoj', acc: 'ugodnu', loc: 'ugodnoj', ins: 'ugodnom' },
-        n: { nom: 'ugodno', gen: 'ugodnog', dat: 'ugodnom', acc: 'ugodno', loc: 'ugodnom', ins: 'ugodnim' },
-    },
-    prijatan: {
-        m: { nom: 'prijatan', gen: 'prijatnog', dat: 'prijatnom', acc: 'prijatan', loc: 'prijatnom', ins: 'prijatnim' },
-        f: { nom: 'prijatna', gen: 'prijatne', dat: 'prijatnoj', acc: 'prijatnu', loc: 'prijatnoj', ins: 'prijatnom' },
-        n: { nom: 'prijatno', gen: 'prijatnog', dat: 'prijatnom', acc: 'prijatno', loc: 'prijatnom', ins: 'prijatnim' },
-    },
-    lijep: {
-        m: { nom: 'lijep', gen: 'lijepog', dat: 'lijepom', acc: 'lijep', loc: 'lijepom', ins: 'lijepim' },
-        f: { nom: 'lijepa', gen: 'lijepe', dat: 'lijepoj', acc: 'lijepu', loc: 'lijepoj', ins: 'lijepom' },
-        n: { nom: 'lijepo', gen: 'lijepog', dat: 'lijepom', acc: 'lijepo', loc: 'lijepom', ins: 'lijepim' },
-    },
+    blag:     { m: { nom: 'blag'     }, f: { nom: 'blaga'     }, n: { nom: 'blago'     } },
+    umjeren:  { m: { nom: 'umjeren'  }, f: { nom: 'umjerena'  }, n: { nom: 'umjereno'  } },
+    ugodan:   { m: { nom: 'ugodan'   }, f: { nom: 'ugodna'    }, n: { nom: 'ugodno'    } },
+    prijatan: { m: { nom: 'prijatan' }, f: { nom: 'prijatna'  }, n: { nom: 'prijatno'  } },
+    lijep:    { m: { nom: 'lijep'    }, f: { nom: 'lijepa'    }, n: { nom: 'lijepo'    } },
 
     // Warm adjectives
-    topao: {
-        m: { nom: 'topao', gen: 'toplog', dat: 'toplom', acc: 'topao', loc: 'toplom', ins: 'toplim' },
-        f: { nom: 'topla', gen: 'tople', dat: 'toploj', acc: 'toplu', loc: 'toploj', ins: 'toplom' },
-        n: { nom: 'toplo', gen: 'toplog', dat: 'toplom', acc: 'toplo', loc: 'toplom', ins: 'toplim' },
-    },
+    topao: { m: { nom: 'topao' }, f: { nom: 'topla' }, n: { nom: 'toplo' } },
 
     // Hot adjectives
-    vruć: {
-        m: { nom: 'vruć', gen: 'vrućeg', dat: 'vrućem', acc: 'vruć', loc: 'vrućem', ins: 'vrućim' },
-        f: { nom: 'vruća', gen: 'vruće', dat: 'vrućoj', acc: 'vruću', loc: 'vrućoj', ins: 'vrućom' },
-        n: { nom: 'vruće', gen: 'vrućeg', dat: 'vrućem', acc: 'vruće', loc: 'vrućem', ins: 'vrućim' },
-    },
-    vreo: {
-        m: { nom: 'vreo', gen: 'vrelog', dat: 'vrelom', acc: 'vreo', loc: 'vrelom', ins: 'vrelim' },
-        f: { nom: 'vrela', gen: 'vrele', dat: 'vreloj', acc: 'vrelu', loc: 'vreloj', ins: 'vrelom' },
-        n: { nom: 'vrelo', gen: 'vrelog', dat: 'vrelom', acc: 'vrelo', loc: 'vrelom', ins: 'vrelim' },
-    },
-    žarki: {
-        m: { nom: 'žarki', gen: 'žarkog', dat: 'žarkom', acc: 'žarki', loc: 'žarkom', ins: 'žarkim' },
-        f: { nom: 'žarka', gen: 'žarke', dat: 'žarkoj', acc: 'žarku', loc: 'žarkoj', ins: 'žarkom' },
-        n: { nom: 'žarko', gen: 'žarkog', dat: 'žarkom', acc: 'žarko', loc: 'žarkom', ins: 'žarkim' },
-    },
-    sparni: {
-        m: { nom: 'sparni', gen: 'sparnog', dat: 'sparnom', acc: 'sparni', loc: 'sparnom', ins: 'sparnim' },
-        f: { nom: 'sparna', gen: 'sparne', dat: 'sparnoj', acc: 'sparnu', loc: 'sparnoj', ins: 'sparnom' },
-        n: { nom: 'sparno', gen: 'sparnog', dat: 'sparnom', acc: 'sparno', loc: 'sparnom', ins: 'sparnim' },
-    },
+    vruć:   { m: { nom: 'vruć'   }, f: { nom: 'vruća'  }, n: { nom: 'vruće'  } },
+    vreo:   { m: { nom: 'vreo'   }, f: { nom: 'vrela'  }, n: { nom: 'vrelo'  } },
+    žarki:  { m: { nom: 'žarki'  }, f: { nom: 'žarka'  }, n: { nom: 'žarko'  } },
+    sparni: { m: { nom: 'sparni' }, f: { nom: 'sparna' }, n: { nom: 'sparno' } },
 
     // Humidity adjectives
-    vlažan: {
-        m: { nom: 'vlažan', gen: 'vlažnog', dat: 'vlažnom', acc: 'vlažan', loc: 'vlažnom', ins: 'vlažnim' },
-        f: { nom: 'vlažna', gen: 'vlažne', dat: 'vlažnoj', acc: 'vlažnu', loc: 'vlažnoj', ins: 'vlažnom' },
-        n: { nom: 'vlažno', gen: 'vlažnog', dat: 'vlažnom', acc: 'vlažno', loc: 'vlažnom', ins: 'vlažnim' },
-    },
+    vlažan: { m: { nom: 'vlažan' }, f: { nom: 'vlažna' }, n: { nom: 'vlažno' } },
 
     // Wind adjectives
-    vjetrovit: {
-        m: { nom: 'vjetrovit', gen: 'vjetrovitog', dat: 'vjetrovitom', acc: 'vjetrovit', loc: 'vjetrovitom', ins: 'vjetrovitim' },
-        f: { nom: 'vjetrovita', gen: 'vjetrovite', dat: 'vjetrovitoj', acc: 'vjetrovitu', loc: 'vjetrovitoj', ins: 'vjetrovitom' },
-        n: { nom: 'vjetrovito', gen: 'vjetrovitog', dat: 'vjetrovitom', acc: 'vjetrovito', loc: 'vjetrovitom', ins: 'vjetrovitim' },
-    },
-    lagan: {
-        m: { nom: 'lagan', gen: 'laganog', dat: 'laganom', acc: 'lagan', loc: 'laganom', ins: 'laganim' },
-        f: { nom: 'lagana', gen: 'lagane', dat: 'laganoj', acc: 'laganu', loc: 'laganoj', ins: 'laganom' },
-        n: { nom: 'lagano', gen: 'laganog', dat: 'laganom', acc: 'lagano', loc: 'laganom', ins: 'laganim' },
-    },
-    jak: {
-        m: { nom: 'jak', gen: 'jakog', dat: 'jakom', acc: 'jak', loc: 'jakom', ins: 'jakim' },
-        f: { nom: 'jaka', gen: 'jake', dat: 'jakoj', acc: 'jaku', loc: 'jakoj', ins: 'jakom' },
-        n: { nom: 'jako', gen: 'jakog', dat: 'jakom', acc: 'jako', loc: 'jakom', ins: 'jakim' },
-    },
+    vjetrovit: { m: { nom: 'vjetrovit' }, f: { nom: 'vjetrovita' }, n: { nom: 'vjetrovito' } },
+    lagan:     { m: { nom: 'lagan'     }, f: { nom: 'lagana'     }, n: { nom: 'lagano'     } },
+    jak:       { m: { nom: 'jak'       }, f: { nom: 'jaka'       }, n: { nom: 'jako'       } },
 
     // Sky adjectives
-    vedar: {
-        m: { nom: 'vedar', gen: 'vedrog', dat: 'vedrom', acc: 'vedar', loc: 'vedrom', ins: 'vedrim' },
-        f: { nom: 'vedra', gen: 'vedre', dat: 'vedroj', acc: 'vedru', loc: 'vedroj', ins: 'vedrom' },
-        n: { nom: 'vedro', gen: 'vedrog', dat: 'vedrom', acc: 'vedro', loc: 'vedrom', ins: 'vedrim' },
-    },
-    sunčan: {
-        m: { nom: 'sunčan', gen: 'sunčanog', dat: 'sunčanom', acc: 'sunčan', loc: 'sunčanom', ins: 'sunčanim' },
-        f: { nom: 'sunčana', gen: 'sunčane', dat: 'sunčanoj', acc: 'sunčanu', loc: 'sunčanoj', ins: 'sunčanom' },
-        n: { nom: 'sunčano', gen: 'sunčanog', dat: 'sunčanom', acc: 'sunčano', loc: 'sunčanom', ins: 'sunčanim' },
-    },
-    oblačan: {
-        m: { nom: 'oblačan', gen: 'oblačnog', dat: 'oblačnom', acc: 'oblačan', loc: 'oblačnom', ins: 'oblačnim' },
-        f: { nom: 'oblačna', gen: 'oblačne', dat: 'oblačnoj', acc: 'oblačnu', loc: 'oblačnoj', ins: 'oblačnom' },
-        n: { nom: 'oblačno', gen: 'oblačnog', dat: 'oblačnom', acc: 'oblačno', loc: 'oblačnom', ins: 'oblačnim' },
-    },
-    tmuran: {
-        m: { nom: 'tmuran', gen: 'tmurnog', dat: 'tmurnom', acc: 'tmuran', loc: 'tmurnom', ins: 'tmurnim' },
-        f: { nom: 'tmurna', gen: 'tmurne', dat: 'tmurnoj', acc: 'tmurnu', loc: 'tmurnoj', ins: 'tmurnom' },
-        n: { nom: 'tmurno', gen: 'tmurnog', dat: 'tmurnom', acc: 'tmurno', loc: 'tmurnom', ins: 'tmurnim' },
-    },
-    siv: {
-        m: { nom: 'siv', gen: 'sivog', dat: 'sivom', acc: 'siv', loc: 'sivom', ins: 'sivim' },
-        f: { nom: 'siva', gen: 'sive', dat: 'sivoj', acc: 'sivu', loc: 'sivoj', ins: 'sivom' },
-        n: { nom: 'sivo', gen: 'sivog', dat: 'sivom', acc: 'sivo', loc: 'sivom', ins: 'sivim' },
-    },
+    vedar:   { m: { nom: 'vedar'   }, f: { nom: 'vedra'   }, n: { nom: 'vedro'   } },
+    sunčan:  { m: { nom: 'sunčan'  }, f: { nom: 'sunčana' }, n: { nom: 'sunčano' } },
+    oblačan: { m: { nom: 'oblačan' }, f: { nom: 'oblačna' }, n: { nom: 'oblačno' } },
+    tmuran:  { m: { nom: 'tmuran'  }, f: { nom: 'tmurna'  }, n: { nom: 'tmurno'  } },
+    siv:     { m: { nom: 'siv'     }, f: { nom: 'siva'    }, n: { nom: 'sivo'    } },
 };
 
 // =============================================================================
@@ -301,6 +199,13 @@ const SYNONYMS = {
         { word: 'oblačan', weight: 1.0 },
         { word: 'tmuran', weight: 0.6 },
         { word: 'siv', weight: 0.5 },
+    ],
+    // Used in instrumental "X s {pool:ins}" condition pairings.
+    thunder_noun: [
+        { word: 'grmljavina', weight: 1.0 },
+    ],
+    gust_noun: [
+        { word: 'udari', weight: 1.0 },
     ],
 };
 
@@ -401,6 +306,14 @@ const TEMPLATES = [
     { pattern: 'Ledeni vjetar', tempRange: [-10, 3], weight: 0.5, minWind: 5 },
     { pattern: 'Ledi do kostiju', tempRange: [-10, 2], weight: 0.4, minWind: 7 },
     { pattern: '{mild_adj:nom:n} uz povjetarac', tempRange: [18, 28], weight: 0.6, minWind: 2, maxWind: 5 },
+    // Instrumental "with X" wind-quality phrases (idiomatic forecast register).
+    // Wind thresholds follow Beaufort / DHMZ usage: udari >= 7 m/s (above
+    // moderate), pod udarima >= 8 (fresh breeze), olujni udari >= 14 (gale).
+    { pattern: 'Vjetar s {gust_noun:ins}', tempRange: [-15, 35], weight: 0.6, minWind: 7 },
+    { pattern: 'Jak vjetar s olujnim {gust_noun:ins}', tempRange: [-15, 35], weight: 0.5, minWind: 14 },
+    { pattern: 'Pod udarima vjetra', tempRange: [-15, 35], weight: 0.7, minWind: 8 },
+    { pattern: 'Hladnoća s vjetrom', tempRange: [-15, 3], weight: 0.6, minWind: 4 },
+    { pattern: 'Žestoka hladnoća s vjetrom', tempRange: [-15, -2], weight: 0.4, minWind: 5 },
 
     // HUMIDITY TEMPLATES
     { pattern: 'Vlažno', tempRange: [-5, 30], weight: 0.7, minHumidity: 75 },
@@ -460,6 +373,9 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Sunce grije', weight: 0.5, tempRange: [18, 35], timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Sunčano i {hot_adj:nom:n}', weight: 0.6, tempRange: [28, 45], timeOfDay: ['morning', 'afternoon'] },
         { pattern: 'Sunce prži', weight: 0.4, tempRange: [32, 50], timeOfDay: ['morning', 'afternoon'] },
+        // Light wind / breeze pairings (instrumental).
+        { pattern: 'Vedro s povjetarcem', weight: 0.5, minWind: 2, maxWind: 5 },
+        { pattern: 'Sunčano s povjetarcem', weight: 0.5, minWind: 2, maxWind: 5, timeOfDay: ['morning', 'afternoon'] },
         // Time of day
         { pattern: 'Sunčano jutro', weight: 0.6, timeOfDay: 'morning' },
         { pattern: '{clear_adj:nom:n} jutro', weight: 0.5, timeOfDay: 'morning' },
@@ -528,6 +444,7 @@ const WEATHER_TEMPLATES = {
         // Temperature combos
         { pattern: 'Magla i {cold_adj:nom:n}', weight: 0.6, tempRange: [-5, 8] },
         { pattern: '{cold_adj:nom:f} magla', weight: 0.5, tempRange: [-5, 5] },
+        { pattern: 'Magla s mrazom', weight: 0.6, tempRange: [-10, 0] },
         // Time of day
         { pattern: 'Jutarnja magla', weight: 0.8, timeOfDay: 'morning' },
         { pattern: 'Maglovito jutro', weight: 0.6, timeOfDay: 'morning' },
@@ -584,6 +501,7 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Kišovito i {cold_adj:nom:n}', weight: 0.6, tempRange: [-5, 12] },
         { pattern: '{warm_adj:nom:f} kiša', weight: 0.5, tempRange: [18, 30] },
         { pattern: 'Kiša i {mild_adj:nom:n}', weight: 0.5, tempRange: [12, 20] },
+        { pattern: 'Kiša s vjetrom', weight: 0.5, minWind: 6 },
         // Time of day
         { pattern: 'Kišno jutro', weight: 0.7, timeOfDay: 'morning' },
         { pattern: 'Kišna večer', weight: 0.7, timeOfDay: 'evening' },
@@ -610,6 +528,9 @@ const WEATHER_TEMPLATES = {
         // Mixed/wet snow
         { pattern: 'Susnježica', weight: 0.8, tempRange: [-2, 3] },
         { pattern: 'Mokri snijeg', weight: 0.7, tempRange: [-1, 2] },
+        // Snow + wind (blowing snow).
+        { pattern: 'Snijeg s vjetrom', weight: 0.6, minWind: 5 },
+        { pattern: 'Susnježica s vjetrom', weight: 0.5, tempRange: [-2, 3], minWind: 5 },
         // Temperature combos
         { pattern: 'Snijeg i mraz', weight: 0.6, tempRange: [-15, -3] },
         { pattern: 'Snijeg i {cold_adj:nom:n}', weight: 0.6, tempRange: [-15, 0] },
@@ -629,10 +550,17 @@ const WEATHER_TEMPLATES = {
         { pattern: 'Grmi i sijeva', weight: 0.5 },
         { pattern: 'Olujno nevrijeme', weight: 0.4 },
         { pattern: 'Munje paraju nebo', weight: 0.3 },
+        // Rain + thunder pairings, instrumental "s grmljavinom" -- the
+        // standard Croatian forecast formula.
+        { pattern: 'Kiša s {thunder_noun:ins}', weight: 0.8, intensity: 'light' },
+        { pattern: 'Kiša s {thunder_noun:ins}', weight: 0.8, intensity: 'moderate' },
+        { pattern: 'Pljuskovi s {thunder_noun:ins}', weight: 0.7, intensity: 'heavy' },
+        { pattern: 'Nevrijeme s olujnim {gust_noun:ins}', weight: 0.5, intensity: 'heavy' },
         // With hail
         { pattern: 'Grmljavina s tučom', weight: 1.0, hail: true },
         { pattern: 'Tuča', weight: 0.9, hail: true },
         { pattern: 'Nevrijeme s tučom', weight: 0.7, hail: true },
+        { pattern: 'Pljuskovi s tučom', weight: 0.7, hail: true },
         // Temperature combos (summer storms)
         { pattern: 'Ljetna grmljavina', weight: 0.5, tempRange: [22, 40] },
         { pattern: 'Oluja i {hot_adj:nom:n}', weight: 0.5, tempRange: [25, 40] },
