@@ -483,8 +483,9 @@ export const StationMap = {
 
             // Add new highlight
             if (nearest) {
-                const dot = document.querySelector(`.station-dot[data-station="${nearest}"]`)
-                    || document.querySelector(`.user-dot[data-station="${nearest}"]`);
+                const sel = CSS.escape(nearest);
+                const dot = document.querySelector(`.station-dot[data-station="${sel}"]`)
+                    || document.querySelector(`.user-dot[data-station="${sel}"]`);
                 if (dot) {
                     dot.classList.add('prehighlight');
                     dot.setAttribute('r', 0.8);
@@ -545,7 +546,7 @@ export const StationMap = {
             if (coords && cachedStations) {
                 const nearest = findNearestStation(cachedStations, coords.lat, coords.lon);
                 if (nearest) {
-                    const dot = document.querySelector(`.station-dot[data-station="${nearest.name}"]`);
+                    const dot = document.querySelector(`.station-dot[data-station="${CSS.escape(nearest.name)}"]`);
                     if (dot) dot.classList.add('nearest-highlight');
                 }
             }
@@ -564,8 +565,9 @@ export const StationMap = {
         } else {
             this.clearTapped();
             this.tapped = stationName;
-            const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`)
-                || document.querySelector(`.user-dot[data-station="${stationName}"]`);
+            const sel = CSS.escape(stationName);
+            const dot = document.querySelector(`.station-dot[data-station="${sel}"]`)
+                || document.querySelector(`.user-dot[data-station="${sel}"]`);
             if (dot) {
                 dot.classList.add('tapped');
                 dot.setAttribute('r', 0.8);
@@ -614,8 +616,9 @@ export const StationMap = {
      */
     showLabel(stationName) {
         const label = document.getElementById('station-label');
-        const dot = document.querySelector(`.station-dot[data-station="${stationName}"]`)
-            || document.querySelector(`.user-dot[data-station="${stationName}"]`);
+        const sel = CSS.escape(stationName);
+        const dot = document.querySelector(`.station-dot[data-station="${sel}"]`)
+            || document.querySelector(`.user-dot[data-station="${sel}"]`);
         if (!label || !dot) return;
 
         const svg = document.getElementById('station-map');

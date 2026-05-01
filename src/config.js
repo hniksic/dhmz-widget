@@ -230,15 +230,20 @@ export function setCachedStations(stations) {
     cachedStations = stations;
 }
 
-/** Whether a fetch is currently in progress (prevents concurrent fetches) */
-export let fetchInProgress = false;
+/**
+ * Identifier of the data source whose fetch is currently in progress, or
+ * null if no fetch is active. Used to dedupe concurrent fetches for the same
+ * source while still letting a source-switch fetch run in parallel with
+ * (and supersede) an in-flight fetch for the previous source.
+ */
+export let fetchingSource = null;
 
 /**
- * Set fetch in progress state.
- * @param {boolean} inProgress
+ * Set the source being fetched, or null when the fetch finishes.
+ * @param {string|null} source
  */
-export function setFetchInProgress(inProgress) {
-    fetchInProgress = inProgress;
+export function setFetchingSource(source) {
+    fetchingSource = source;
 }
 
 /** Timestamp of last fetch start (for throttling auto-refresh) */

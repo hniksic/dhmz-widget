@@ -294,6 +294,11 @@ export const PljusakParser = {
 
     /**
      * Parses measurement time from pljusak.com format (HH:MM:SS).
+     *
+     * The timestamp is Europe/Zagreb wall-clock time. We compare it to the
+     * current Europe/Zagreb wall-clock (read via Intl.DateTimeFormat) so the
+     * result is correct regardless of the device's local timezone.
+     *
      * @param {string|null} timeStr - Time string like "18:10:00"
      * @returns {Date|null}
      */
@@ -302,18 +307,30 @@ export const PljusakParser = {
         const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
         if (!match) return null;
 
+        const measHour = parseInt(match[1], 10);
+        const measMinute = parseInt(match[2], 10);
+
         const now = new Date();
-        const hour = parseInt(match[1], 10);
-        const minute = parseInt(match[2], 10);
+        const parts = Object.fromEntries(
+            new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Zagreb',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false,
+            }).formatToParts(now).map(p => [p.type, p.value])
+        );
+        // Some locales emit "24" at midnight; normalize to "0".
+        const nowHour = parseInt(parts.hour === '24' ? '0' : parts.hour, 10);
+        const nowMinute = parseInt(parts.minute, 10);
+        const nowSecond = parseInt(parts.second, 10);
 
-        const measurementTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+        // Compute "minutes ago", wrapping across midnight (yesterday's data).
+        // Stations whose readings are >12h old are filtered upstream.
+        const nowMinutesOfDay = nowHour * 60 + nowMinute + nowSecond / 60;
+        const measMinutesOfDay = measHour * 60 + measMinute;
+        let diffMinutes = nowMinutesOfDay - measMinutesOfDay;
+        if (diffMinutes < 0) diffMinutes += 24 * 60;
 
-        // If measurement time is in the future, assume it's from yesterday
-        if (measurementTime > now) {
-            measurementTime.setDate(measurementTime.getDate() - 1);
-        }
-
-        return measurementTime;
+        return new Date(now.getTime() - diffMinutes * 60 * 1000);
     },
 
     /**

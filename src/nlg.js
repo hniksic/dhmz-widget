@@ -645,10 +645,13 @@ function fillTemplate(pattern, context) {
 
         const word = selected.word;
 
-        if (ADJECTIVES[word]) {
+        // Dispatch by pool suffix, not by lexicon membership: some words
+        // (e.g. "studen") exist as both noun and adjective, so the lexicon
+        // check is ambiguous.
+        if (poolName.endsWith('_adj')) {
             const gender = explicitGender || 'm';
             return declineAdjective(word, caseForm, gender);
-        } else if (NOUNS[word]) {
+        } else if (poolName.endsWith('_noun')) {
             return declineNoun(word, caseForm);
         }
 

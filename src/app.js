@@ -5,8 +5,8 @@
  */
 
 import {
-    DATA_SOURCE, fetchViaProxy, getSourceConfig, cachedStations, setCachedStations,
-    fetchInProgress, setFetchInProgress, setLastRefresh, lastRefresh, REFRESH_INTERVAL
+    DATA_SOURCE, DATA_SOURCES, fetchViaProxy, cachedStations, setCachedStations,
+    fetchingSource, setFetchingSource, setLastRefresh, lastRefresh, REFRESH_INTERVAL
 } from './config.js';
 import { log, warn, error } from './log.js';
 import './parsers.js';  // Side-effect: registers parsers
@@ -29,31 +29,42 @@ import { StationMap } from './map.js';
  *        Used for user-initiated refreshes to regenerate condition descriptions.
  */
 async function fetchWeatherData({ skipRender = false, forceRender = false } = {}) {
-    // Prevent concurrent fetches (e.g., click + focus firing together)
-    if (fetchInProgress) {
+    // Dedupe: if a fetch for the current source is already running, skip.
+    // A fetch for a *different* source (i.e. one started before a toggle)
+    // is allowed to coexist - it will discard its own result on completion.
+    if (fetchingSource === DATA_SOURCE) {
         return;
     }
-    setFetchInProgress(true);
+    const source = DATA_SOURCE;
+    const config = DATA_SOURCES[source];
+    setFetchingSource(source);
     setLastRefresh(Date.now());
 
     const cacheBuster = `?_=${Date.now()}`;
     const widget = document.getElementById('widget');
 
     widget.classList.add('refreshing');
-    log(`Fetching from ${DATA_SOURCE}...`);
+    log(`Fetching from ${source}...`);
 
     try {
-        const validate = getSourceConfig().parser.validate;
-        const response = await fetchViaProxy(getSourceConfig().url + cacheBuster, {}, validate);
-
+        const response = await fetchViaProxy(
+            config.url + cacheBuster, {}, config.parser.validate
+        );
         const responseText = await response.text();
 
-        // Parse using source-specific parser
-        setCachedStations(getSourceConfig().parser.parse(responseText));
+        // If the user switched sources while we were fetching, drop the
+        // stale response - the parser would mismatch and the new source's
+        // fetch will commit instead.
+        if (source !== DATA_SOURCE) {
+            log(`Source changed during fetch (${source} -> ${DATA_SOURCE}), discarding`);
+            return;
+        }
+
+        setCachedStations(config.parser.parse(responseText));
 
         const collator = new Intl.Collator('hr');
         const stationNames = Object.keys(cachedStations).sort(collator.compare);
-        log(`Loaded ${stationNames.length} stations from ${DATA_SOURCE}`);
+        log(`Loaded ${stationNames.length} stations from ${source}`);
 
         // Clear any previous error toast on successful fetch
         hideToast();
@@ -64,16 +75,22 @@ async function fetchWeatherData({ skipRender = false, forceRender = false } = {}
             renderSelectedStation(forceRender);
         }
 
-    } catch (error) {
-        warn('Fetch error:', error.message);
+    } catch (e) {
+        warn('Fetch error:', e.message);
+        // Don't show errors for results that would have been discarded anyway
+        if (source !== DATA_SOURCE) return;
         // If we have cached data, show toast and keep displaying old data
         if (cachedStations) {
             showToast('Učitavanje nije uspjelo');
         } else {
-            renderError('Greška: ' + error.message);
+            renderError('Greška: ' + e.message);
         }
     } finally {
-        setFetchInProgress(false);
+        // Only clear the guard if it's still ours - a parallel toggle fetch
+        // for a different source may have taken ownership.
+        if (fetchingSource === source) {
+            setFetchingSource(null);
+        }
         widget.classList.remove('refreshing');
     }
 }

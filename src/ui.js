@@ -431,16 +431,26 @@ export const SourceSwitcher = {
 
         // Map to nearest station in new source
         if (cachedStations) {
+            let newLocation = oldLocation;
             if (wasNearest) {
                 // "Najbliža" was selected - keep it (nearest logic uses GPS automatically)
-                setSelectedLocation(NEAREST_LOCATION);
+                newLocation = NEAREST_LOCATION;
             } else if (oldStation && isFinite(oldStation.lat) && isFinite(oldStation.lon)) {
                 // Find station nearest to old station's coordinates
                 const nearest = findNearestStation(cachedStations, oldStation.lat, oldStation.lon);
-                if (nearest) {
-                    setSelectedLocation(nearest.name);
-                }
+                if (nearest) newLocation = nearest.name;
             }
+            if (newLocation !== oldLocation) {
+                setSelectedLocation(newLocation);
+            }
+
+            // Repopulate so the dropdown reflects the new selection without
+            // carrying the previous source's station name as a ghost entry.
+            // (fetchWeatherData populated with the old selection because the
+            // location is updated only after the fetch resolves.)
+            const stationNames = Object.keys(cachedStations).sort(new Intl.Collator('hr').compare);
+            LocationPicker.populate(stationNames);
+
             if (this.onRender) {
                 this.onRender();
             }
